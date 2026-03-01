@@ -1,0 +1,175 @@
+---
+title: LaserTool
+description: API reference for the LaserTool class
+---
+
+## LaserTool
+
+The `LaserTool` enables users to draw temporary laser pointer paths on the canvas that automatically fade away. This is useful for presentations, demonstrations, or collaborative work where you want to point out specific areas without creating permanent marks.
+
+## Overview
+
+`LaserTool` extends `StateNode` and provides laser pointer functionality with automatic fading. The laser path appears as you drag your pointer and fades out after a configurable delay.
+
+## Static properties
+
+<ParamField path="id" type="string" default='"laser"'>
+  Tool identifier
+</ParamField>
+
+<ParamField path="initial" type="string" default='"idle"'>
+  Initial child state
+</ParamField>
+
+<ParamField path="isLockable" type="boolean" default="false">
+  Laser tool cannot be locked
+</ParamField>
+
+## Child states
+
+The laser tool has two child states:
+
+- **Idle** - Tool is active but not currently drawing
+- **Lasering** - User is actively drawing with the laser
+
+## Instance properties
+
+<ParamField path="sessionId" type="string | null">
+  Current laser drawing session ID, or null if no active session
+</ParamField>
+
+## Methods
+
+### onEnter()
+
+Called when entering the laser tool. Sets the cursor to a crosshair.
+
+```typescript
+override onEnter(): void
+```
+
+### onExit()
+
+Called when exiting the laser tool. Clears the session ID.
+
+```typescript
+override onExit(): void
+```
+
+### onCancel()
+
+Handles cancellation (Escape key). Clears the current laser session or returns to select tool.
+
+```typescript
+override onCancel(): void
+```
+
+### getSessionId()
+
+Gets the current laser session ID, or creates a new one if needed.
+
+```typescript
+getSessionId(): string
+```
+
+**Returns:** Session ID string
+
+The session is created with these options:
+- `selfConsume: false` - Path doesn't consume pointer events
+- `idleTimeoutMs` - Delay before fading (from editor options)
+- `fadeMode: 'grouped'` - Fades as a group
+- `fadeEasing: 'ease-in'` - Easing function for fade animation
+
+## Usage
+
+The laser tool is included in `defaultTools` and available by default:
+
+```typescript
+import { Tldraw } from 'tldraw'
+
+function App() {
+  return <Tldraw />
+}
+
+// Programmatically activate laser tool
+function MyComponent() {
+  const editor = useEditor()
+  
+  const activateLaser = () => {
+    editor.setCurrentTool('laser')
+  }
+  
+  return <button onClick={activateLaser}>Laser Pointer</button>
+}
+```
+
+## Keyboard shortcuts
+
+- **K** - Activate laser tool
+- **Escape** - Cancel current laser path or return to select tool
+
+## Configuration
+
+The laser fade delay can be configured via editor options:
+
+```typescript
+<Tldraw
+  options={{
+    laserDelayMs: 1500 // Delay before laser starts fading (default: 1000ms)
+  }}
+/>
+```
+
+## Common patterns
+
+### Temporary highlighting in presentations
+
+```typescript
+function Presentation() {
+  const editor = useEditor()
+  
+  // Switch to laser for highlighting
+  const startHighlighting = () => {
+    editor.setCurrentTool('laser')
+  }
+  
+  // Return to normal selection
+  const stopHighlighting = () => {
+    editor.setCurrentTool('select')
+  }
+  
+  return (
+    <div>
+      <button onClick={startHighlighting}>Start Highlighting</button>
+      <button onClick={stopHighlighting}>Stop</button>
+    </div>
+  )
+}
+```
+
+### Custom laser tool with different fade duration
+
+```typescript
+class CustomLaserTool extends LaserTool {
+  override getSessionId(): string {
+    if (this.sessionId && this.editor.scribbles.isSessionActive(this.sessionId)) {
+      return this.sessionId
+    }
+    
+    this.sessionId = this.editor.scribbles.startSession({
+      selfConsume: false,
+      idleTimeoutMs: 3000, // Longer fade delay
+      fadeMode: 'grouped',
+      fadeEasing: 'ease-out', // Different easing
+    })
+    
+    return this.sessionId
+  }
+}
+```
+
+## Related
+
+- [StateNode](/api/tools/state-node) - Base class for all tools
+- [HandTool](/api/tools/hand-tool) - Panning tool
+- [SelectTool](/api/tools/select-tool) - Selection tool

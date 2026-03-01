@@ -1,0 +1,277 @@
+---
+title: BookmarkShapeUtil
+description: API reference for the BookmarkShapeUtil class
+---
+
+## BookmarkShapeUtil
+
+`BookmarkShapeUtil` provides functionality for bookmark cards that display previews of web URLs. Bookmarks show a title, description, and favicon fetched from the linked website.
+
+## Overview
+
+The bookmark shape creates a card-like display for web links, automatically fetching and displaying metadata from the target URL. It's useful for organizing references, resources, or creating visual link collections.
+
+## Static properties
+
+<ParamField path="type" type="string" default='"bookmark"'>
+  Shape type identifier
+</ParamField>
+
+<ParamField path="props" type="TLBookmarkShapeProps">
+  Bookmark shape property definitions
+</ParamField>
+
+<ParamField path="migrations" type="Migrations">
+  Shape migration definitions
+</ParamField>
+
+## Shape properties
+
+<ParamField path="w" type="number" default="300">
+  Card width in pixels
+</ParamField>
+
+<ParamField path="h" type="number" default="320">
+  Card height in pixels
+</ParamField>
+
+<ParamField path="assetId" type="TLAssetId | null" default="null">
+  Asset ID for the bookmark metadata (title, description, image)
+</ParamField>
+
+<ParamField path="url" type="string" default='""'>
+  The URL being bookmarked
+</ParamField>
+
+## Methods
+
+### getDefaultProps()
+
+Returns default properties for new bookmark shapes.
+
+```typescript
+getDefaultProps(): TLBookmarkShape['props']
+```
+
+### getGeometry(shape)
+
+Returns rectangular geometry matching the card dimensions.
+
+```typescript
+getGeometry(shape: TLBookmarkShape): Rectangle2d
+```
+
+### component(shape)
+
+Renders the bookmark card with title, description, favicon, and preview image.
+
+```typescript
+component(shape: TLBookmarkShape): JSX.Element
+```
+
+**Card structure:**
+- Favicon and domain at the top
+- Title (truncated if too long)
+- Description (truncated if too long)
+- Preview image (if available)
+- URL at the bottom
+
+### indicator(shape)
+
+Renders a rectangular selection indicator.
+
+```typescript
+indicator(shape: TLBookmarkShape): JSX.Element
+```
+
+### canResize()
+
+Bookmarks cannot be resized.
+
+```typescript
+canResize(): boolean // Returns false
+```
+
+### onBeforeCreate(shape)
+
+Handles URL validation and initiates metadata fetching when a bookmark is created.
+
+```typescript
+onBeforeCreate(shape: TLBookmarkShape): TLBookmarkShape
+```
+
+### onBeforeUpdate(prev, next)
+
+Handles URL changes and triggers metadata refresh.
+
+```typescript
+onBeforeUpdate(prev: TLBookmarkShape, next: TLBookmarkShape): TLBookmarkShape
+```
+
+## Asset metadata
+
+When a bookmark is created, tldraw automatically fetches metadata from the URL:
+
+- **Title** - Page title from `<title>` tag
+- **Description** - Meta description or Open Graph description
+- **Favicon** - Site favicon
+- **Image** - Open Graph image or first significant image
+
+This data is stored as a bookmark asset in the editor's asset system.
+
+## Usage
+
+### Creating bookmarks programmatically
+
+```typescript
+import { createBookmarkFromUrl } from 'tldraw'
+
+// Create a bookmark with automatic metadata fetching
+await createBookmarkFromUrl(editor, 'https://github.com/tldraw/tldraw', {
+  x: 100,
+  y: 100
+})
+```
+
+### Creating bookmark manually
+
+```typescript
+const bookmarkId = createShapeId()
+
+editor.createShape({
+  id: bookmarkId,
+  type: 'bookmark',
+  x: 200,
+  y: 200,
+  props: {
+    url: 'https://tldraw.dev',
+    w: 300,
+    h: 320
+  }
+})
+```
+
+### Converting embed to bookmark
+
+Embeds can be converted to bookmarks when the embed service is not available:
+
+```typescript
+function convertToBookmark(embedId: TLShapeId) {
+  const embed = editor.getShape(embedId) as TLEmbedShape
+  
+  editor.createShape({
+    type: 'bookmark',
+    x: embed.x,
+    y: embed.y,
+    props: {
+      url: embed.props.url
+    }
+  })
+  
+  editor.deleteShape(embedId)
+}
+```
+
+## Common patterns
+
+### Link collection board
+
+```typescript
+const RESOURCES = [
+  'https://tldraw.dev',
+  'https://github.com/tldraw/tldraw',
+  'https://discord.tldraw.com'
+]
+
+async function createResourceBoard() {
+  let y = 100
+  
+  for (const url of RESOURCES) {
+    await createBookmarkFromUrl(editor, url, { x: 100, y })
+    y += 350 // Space between bookmarks
+  }
+}
+```
+
+### Reading bookmark data
+
+```typescript
+function getBookmarkInfo(bookmarkId: TLShapeId) {
+  const shape = editor.getShape(bookmarkId) as TLBookmarkShape
+  
+  if (shape.props.assetId) {
+    const asset = editor.getAsset(shape.props.assetId)
+    
+    return {
+      url: shape.props.url,
+      title: asset?.props.title,
+      description: asset?.props.description,
+      image: asset?.props.image,
+      favicon: asset?.props.favicon
+    }
+  }
+  
+  return { url: shape.props.url }
+}
+```
+
+### Refreshing bookmark metadata
+
+```typescript
+async function refreshBookmark(bookmarkId: TLShapeId) {
+  const shape = editor.getShape(bookmarkId) as TLBookmarkShape
+  const url = shape.props.url
+  
+  // Delete old asset
+  if (shape.props.assetId) {
+    editor.deleteAsset(shape.props.assetId)
+  }
+  
+  // Update shape to trigger refetch
+  editor.updateShape({
+    id: bookmarkId,
+    type: 'bookmark',
+    props: {
+      url: url,
+      assetId: null
+    }
+  })
+}
+```
+
+## Customization
+
+### Custom bookmark appearance
+
+```typescript
+class CustomBookmarkShapeUtil extends BookmarkShapeUtil {
+  override component(shape: TLBookmarkShape) {
+    const asset = shape.props.assetId 
+      ? this.editor.getAsset(shape.props.assetId) 
+      : null
+    
+    return (
+      <div style={{
+        width: shape.props.w,
+        height: shape.props.h,
+        border: '2px solid blue',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h3>{asset?.props.title || 'Loading...'}</h3>
+        <p>{asset?.props.description}</p>
+        <a href={shape.props.url} target="_blank">
+          {shape.props.url}
+        </a>
+      </div>
+    )
+  }
+}
+```
+
+## Related
+
+- [createBookmarkFromUrl](/api/utils/assets#createBookmarkFromUrl) - Helper function to create bookmarks
+- [EmbedShapeUtil](/api/shapes/embed) - Embedded content from URLs
+- [Assets API](/api/utils/assets) - Asset management
+- [BaseBoxShapeUtil](/api/shapes/base-box-shape) - Base class for rectangular shapes

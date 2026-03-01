@@ -1,0 +1,221 @@
+---
+title: LineShapeUtil
+description: API reference for the LineShapeUtil class
+---
+
+## LineShapeUtil
+
+`LineShapeUtil` provides functionality for multi-point line shapes with configurable styles and spline interpolation. Lines can be straight segments or smooth curves.
+
+## Overview
+
+The line shape allows users to create connected line segments with multiple control points. Each point can be moved independently, and new points can be added by clicking the midpoint handles.
+
+## Static properties
+
+<ParamField path="type" type="string" default='"line"'>
+  Shape type identifier
+</ParamField>
+
+<ParamField path="props" type="TLLineShapeProps">
+  Line shape property definitions
+</ParamField>
+
+<ParamField path="migrations" type="Migrations">
+  Shape migration definitions
+</ParamField>
+
+## Shape properties
+
+<ParamField path="dash" type="'draw' | 'solid' | 'dashed' | 'dotted'" default="'draw'">
+  Line dash style
+</ParamField>
+
+<ParamField path="size" type="'s' | 'm' | 'l' | 'xl'" default="'m'">
+  Line thickness
+</ParamField>
+
+<ParamField path="color" type="TLColorType" default="'black'">
+  Line color
+</ParamField>
+
+<ParamField path="spline" type="'line' | 'cubic'" default="'line'">
+  Interpolation method - 'line' for straight segments, 'cubic' for smooth curves
+</ParamField>
+
+<ParamField path="points" type="Record<string, TLLineShapePoint>">
+  Dictionary of line points with fractional indexing
+</ParamField>
+
+<ParamField path="scale" type="number" default="1">
+  Shape scale factor
+</ParamField>
+
+## Point structure
+
+Each point in the `points` object has:
+
+```typescript
+interface TLLineShapePoint {
+  id: string       // Fractional index (e.g., 'a1', 'a2')
+  index: string    // Same as id
+  x: number        // X coordinate relative to shape origin
+  y: number        // Y coordinate relative to shape origin
+}
+```
+
+## Methods
+
+### getDefaultProps()
+
+Returns default properties for new line shapes with two points.
+
+```typescript
+getDefaultProps(): TLLineShape['props']
+```
+
+### getGeometry(shape)
+
+Returns the path geometry for the line, either straight segments or cubic spline.
+
+```typescript
+getGeometry(shape: TLLineShape): PathBuilderGeometry2d
+```
+
+### getHandles(shape)
+
+Returns handles for all vertices and midpoint create handles.
+
+```typescript
+getHandles(shape: TLLineShape): TLHandle[]
+```
+
+Returns two types of handles:
+- **Vertex handles** - At each point, can be dragged to move the point
+- **Create handles** - At segment midpoints, click to add new points
+
+### component(shape)
+
+Renders the line using SVG path with configurable stroke styles.
+
+```typescript
+component(shape: TLLineShape): JSX.Element
+```
+
+### indicator(shape)
+
+Renders a simplified path indicator for selection.
+
+```typescript
+indicator(shape: TLLineShape): JSX.Element
+```
+
+## Handle interactions
+
+### onHandleDrag(shape, info)
+
+Handles dragging of vertex points and creation of new points.
+
+```typescript
+onHandleDrag(shape: TLLineShape, info: TLHandleDragInfo): TLLineShape | void
+```
+
+**Behavior:**
+- Dragging vertex handles moves existing points
+- Clicking create handles inserts new points at that location
+
+### onResize(shape, info)
+
+Handles resizing by scaling all points proportionally.
+
+```typescript
+onResize(shape: TLLineShape, info: TLResizeInfo): TLLineShape
+```
+
+## Configuration
+
+### Spline types
+
+**Line** ('line'):
+- Straight segments between points
+- Sharp corners at vertices
+- Simple and precise
+
+**Cubic** ('cubic'):
+- Smooth curves through all points
+- Rounded corners
+- More organic appearance
+
+## Usage examples
+
+### Creating a line programmatically
+
+```typescript
+const lineId = createShapeId()
+
+editor.createShape({
+  id: lineId,
+  type: 'line',
+  x: 100,
+  y: 100,
+  props: {
+    color: 'blue',
+    size: 'l',
+    spline: 'line',
+    dash: 'solid',
+    points: {
+      'a1': { id: 'a1', index: 'a1', x: 0, y: 0 },
+      'a2': { id: 'a2', index: 'a2', x: 100, y: 0 },
+      'a3': { id: 'a3', index: 'a3', x: 100, y: 100 },
+    }
+  }
+})
+```
+
+### Smooth curve line
+
+```typescript
+editor.createShape({
+  type: 'line',
+  x: 200,
+  y: 200,
+  props: {
+    color: 'red',
+    size: 'm',
+    spline: 'cubic', // Smooth curves
+    dash: 'draw',
+    points: {
+      'a1': { id: 'a1', index: 'a1', x: 0, y: 0 },
+      'a2': { id: 'a2', index: 'a2', x: 50, y: -30 },
+      'a3': { id: 'a3', index: 'a3', x: 100, y: 0 },
+      'a4': { id: 'a4', index: 'a4', x: 150, y: 30 },
+    }
+  }
+})
+```
+
+### Adding points to existing line
+
+```typescript
+const shape = editor.getShape(lineId) as TLLineShape
+const points = Object.values(shape.props.points)
+const lastPoint = points[points.length - 1]
+const newIndex = getIndexAbove(lastPoint.index)
+
+editor.updateShape({
+  id: lineId,
+  type: 'line',
+  props: {
+    points: {
+      ...shape.props.points,
+      [newIndex]: { id: newIndex, index: newIndex, x: 200, y: 100 }
+    }
+  }
+})
+```
+
+## Related
+
+- [ArrowShapeUtil](/api/shapes/arrow) - Line with arrowheads and labels
+- [DrawShapeUtil](/api/shapes/draw) - Freehand drawing
+- [ShapeUtil](/api/shapes/shape-util) - Base class

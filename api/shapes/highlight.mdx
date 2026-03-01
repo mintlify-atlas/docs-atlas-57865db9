@@ -1,0 +1,225 @@
+---
+title: HighlightShapeUtil
+description: API reference for the HighlightShapeUtil class
+---
+
+## HighlightShapeUtil
+
+`HighlightShapeUtil` provides functionality for highlighter-style drawing with semi-transparent strokes. It's similar to the draw tool but uses a different rendering style optimized for highlighting text or content.
+
+## Overview
+
+The highlight shape creates freehand paths with a semi-transparent, marker-like appearance. It's designed for emphasizing content without obscuring it.
+
+## Static properties
+
+<ParamField path="type" type="string" default='"highlight"'>
+  Shape type identifier
+</ParamField>
+
+<ParamField path="props" type="TLHighlightShapeProps">
+  Highlight shape property definitions
+</ParamField>
+
+<ParamField path="migrations" type="Migrations">
+  Shape migration definitions
+</ParamField>
+
+## Shape properties
+
+<ParamField path="segments" type="TLDrawShapeSegment[]">
+  Array of drawing segments, each containing points with pressure data
+</ParamField>
+
+<ParamField path="color" type="TLColorType" default="'yellow'">
+  Highlight color
+</ParamField>
+
+<ParamField path="size" type="'s' | 'm' | 'l' | 'xl'" default="'m'">
+  Highlight thickness
+</ParamField>
+
+<ParamField path="isComplete" type="boolean" default="false">
+  Whether the drawing is complete
+</ParamField>
+
+<ParamField path="isPen" type="boolean" default="false">
+  Whether drawn with a pen/stylus (affects rendering)
+</ParamField>
+
+<ParamField path="scale" type="number" default="1">
+  Shape scale factor
+</ParamField>
+
+## Methods
+
+### getDefaultProps()
+
+Returns default properties for new highlight shapes.
+
+```typescript
+getDefaultProps(): TLHighlightShape['props']
+```
+
+### getGeometry(shape)
+
+Computes geometry from the highlight segments.
+
+```typescript
+getGeometry(shape: TLHighlightShape): Group2d
+```
+
+Returns a `Group2d` containing the path geometry for all segments.
+
+### component(shape)
+
+Renders the highlight using SVG paths with semi-transparent stroke.
+
+```typescript
+component(shape: TLHighlightShape): JSX.Element
+```
+
+**Rendering characteristics:**
+- Semi-transparent stroke for marker effect
+- Optimized path simplification
+- Smooth curves between points
+- Pressure-sensitive width (when using pen)
+
+### indicator(shape)
+
+Renders a simplified indicator for selection.
+
+```typescript
+indicator(shape: TLHighlightShape): JSX.Element
+```
+
+## Usage
+
+### Creating highlights programmatically
+
+```typescript
+import { TLDrawShapeSegment } from 'tldraw'
+
+// Create a highlight
+const highlightId = createShapeId()
+
+editor.createShape({
+  id: highlightId,
+  type: 'highlight',
+  x: 100,
+  y: 100,
+  props: {
+    color: 'yellow',
+    size: 'l',
+    segments: [
+      {
+        type: 'free',
+        points: [
+          { x: 0, y: 0, z: 0.5 },
+          { x: 10, y: 5, z: 0.5 },
+          { x: 20, y: 3, z: 0.5 },
+          // ... more points
+        ]
+      }
+    ],
+    isComplete: true
+  }
+})
+```
+
+### Highlighting with different colors
+
+```typescript
+// Yellow highlighter (default)
+editor.setStyleForNextShapes({ color: 'yellow' })
+editor.setCurrentTool('highlight')
+
+// Orange highlighter
+editor.setStyleForNextShapes({ color: 'orange' })
+
+// Green highlighter
+editor.setStyleForNextShapes({ color: 'light-green' })
+```
+
+### Adjusting highlight thickness
+
+```typescript
+// Thin highlight
+editor.setStyleForNextShapes({ size: 's' })
+
+// Medium highlight (default)
+editor.setStyleForNextShapes({ size: 'm' })
+
+// Thick highlight
+editor.setStyleForNextShapes({ size: 'xl' })
+```
+
+## Differences from DrawShapeUtil
+
+While similar to `DrawShapeUtil`, highlights have key differences:
+
+| Feature | HighlightShapeUtil | DrawShapeUtil |
+|---------|-------------------|---------------|
+| Opacity | Semi-transparent | Opaque |
+| Purpose | Emphasizing content | General drawing |
+| Style | Marker-like | Pen-like |
+| Fill | Never filled | Can be filled |
+
+## Common patterns
+
+### Temporary highlight overlay
+
+```typescript
+function TemporaryHighlight({ content }: { content: string }) {
+  const editor = useEditor()
+  
+  const highlightText = () => {
+    // Switch to highlight tool
+    editor.setCurrentTool('highlight')
+    editor.setStyleForNextShapes({ color: 'yellow', size: 'l' })
+    
+    // User draws highlight
+    // When complete, return to select tool
+    editor.once('shape-create', () => {
+      editor.setCurrentTool('select')
+    })
+  }
+  
+  return <button onClick={highlightText}>Highlight</button>
+}
+```
+
+### Multiple highlight colors
+
+```typescript
+const HIGHLIGHT_COLORS = ['yellow', 'orange', 'light-green', 'light-blue'] as const
+
+function HighlighterPalette() {
+  const editor = useEditor()
+  
+  const selectHighlighter = (color: typeof HIGHLIGHT_COLORS[number]) => {
+    editor.setCurrentTool('highlight')
+    editor.setStyleForNextShapes({ color })
+  }
+  
+  return (
+    <div>
+      {HIGHLIGHT_COLORS.map(color => (
+        <button 
+          key={color}
+          onClick={() => selectHighlighter(color)}
+          style={{ backgroundColor: color }}
+        >
+          {color}
+        </button>
+      ))}
+    </div>
+  )
+}
+```
+
+## Related
+
+- [DrawShapeUtil](/api/shapes/draw) - Freehand drawing with opaque strokes
+- [LineShapeUtil](/api/shapes/line) - Multi-point line shapes
+- [ShapeUtil](/api/shapes/shape-util) - Base class for all shapes

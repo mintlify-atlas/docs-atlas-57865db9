@@ -106,11 +106,14 @@
               "api/shapes/arrow",
               "api/shapes/draw",
               "api/shapes/geo",
+              "api/shapes/line",
+              "api/shapes/highlight",
               "api/shapes/text",
               "api/shapes/image",
               "api/shapes/video",
               "api/shapes/frame",
-              "api/shapes/note"
+              "api/shapes/note",
+              "api/shapes/bookmark"
             ]
           },
           {
@@ -120,6 +123,7 @@
               "api/tools/select-tool",
               "api/tools/hand-tool",
               "api/tools/eraser-tool",
+              "api/tools/laser-tool",
               "api/tools/zoom-tool"
             ]
           },
