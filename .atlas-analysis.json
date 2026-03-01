@@ -1,0 +1,242 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "tldraw",
+  "projectDescription": "Infinite canvas SDK for building collaborative whiteboard and diagram applications in React",
+  "theme": "palm",
+  "primaryColor": "#1d1d1d",
+  "lightColor": "#8b8b8b",
+  "darkColor": "#fafafa",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core concepts",
+            "pages": [
+              "concepts/editor",
+              "concepts/shapes",
+              "concepts/tools",
+              "concepts/bindings",
+              "concepts/canvas",
+              "concepts/store"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/custom-shapes",
+              "guides/custom-tools",
+              "guides/custom-ui",
+              "guides/multiplayer",
+              "guides/events-and-side-effects",
+              "guides/persistence",
+              "guides/ai-integrations"
+            ]
+          },
+          {
+            "group": "Shapes",
+            "pages": [
+              "shapes/overview",
+              "shapes/shape-utils",
+              "shapes/geometry",
+              "shapes/rendering",
+              "shapes/interactions"
+            ]
+          },
+          {
+            "group": "UI and theming",
+            "pages": [
+              "ui/overview",
+              "ui/components",
+              "ui/customization",
+              "ui/menus-and-toolbars",
+              "ui/translations"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/architecture",
+              "advanced/state-management",
+              "advanced/performance",
+              "advanced/export-and-import",
+              "advanced/embedding"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/editor",
+              "api/tldraw-component",
+              "api/store",
+              "api/schema"
+            ]
+          },
+          {
+            "group": "Shapes",
+            "pages": [
+              "api/shapes/shape-util",
+              "api/shapes/base-box-shape",
+              "api/shapes/arrow",
+              "api/shapes/draw",
+              "api/shapes/geo",
+              "api/shapes/text",
+              "api/shapes/image",
+              "api/shapes/video",
+              "api/shapes/frame",
+              "api/shapes/note"
+            ]
+          },
+          {
+            "group": "Tools",
+            "pages": [
+              "api/tools/state-node",
+              "api/tools/select-tool",
+              "api/tools/hand-tool",
+              "api/tools/eraser-tool",
+              "api/tools/zoom-tool"
+            ]
+          },
+          {
+            "group": "Bindings",
+            "pages": [
+              "api/bindings/binding-util",
+              "api/bindings/arrow-binding"
+            ]
+          },
+          {
+            "group": "UI Components",
+            "pages": [
+              "api/ui/context-providers",
+              "api/ui/hooks",
+              "api/ui/primitives",
+              "api/ui/actions-and-tools"
+            ]
+          },
+          {
+            "group": "Geometry",
+            "pages": [
+              "api/geometry/primitives",
+              "api/geometry/box",
+              "api/geometry/vec",
+              "api/geometry/shapes"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utils/assets",
+              "api/utils/export",
+              "api/utils/text"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Multiplayer",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": [
+              "sync/introduction",
+              "sync/quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "sync/setup",
+              "sync/authentication",
+              "sync/deployment",
+              "sync/customization"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "sync/api/client",
+              "sync/api/server",
+              "sync/api/store-sync"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Basic",
+            "pages": [
+              "examples/basic-setup",
+              "examples/controlled-editor",
+              "examples/readonly-mode"
+            ]
+          },
+          {
+            "group": "Customization",
+            "pages": [
+              "examples/custom-shape",
+              "examples/custom-tool",
+              "examples/custom-ui",
+              "examples/custom-styles"
+            ]
+          },
+          {
+            "group": "Integration",
+            "pages": [
+              "examples/multiplayer",
+              "examples/persistence",
+              "examples/ai-integration",
+              "examples/embedded-content"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Infinite canvas with pan, zoom, and multi-touch support",
+    "Built-in shapes, tools, and UI components",
+    "Custom shapes with ShapeUtil API",
+    "Custom tools via StateNode state machines",
+    "Bindings system for shape relationships",
+    "Real-time multiplayer with @tldraw/sync",
+    "Reactive state management with signals",
+    "Rich text editing with Tiptap",
+    "Image and video support with cropping",
+    "Export to PNG, SVG, and JSON",
+    "Fully customizable UI and theming",
+    "AI integration primitives"
+  ],
+  "publicApiSurface": [
+    "Tldraw - Main React component",
+    "TldrawEditor - Headless editor component",
+    "Editor - Core editor class with canvas API",
+    "ShapeUtil - Base class for shape definitions",
+    "StateNode - Base class for tools",
+    "BindingUtil - Base class for bindings",
+    "createTLStore - Store factory",
+    "createTLUser - User factory",
+    "useEditor - React hook for editor access",
+    "useTldrawUser - React hook for user management",
+    "@tldraw/sync - Multiplayer SDK",
+    "defaultShapeUtils - Built-in shape utilities",
+    "defaultTools - Built-in tools",
+    "Box, Vec, Mat - Geometry primitives",
+    "Geometry2d - Shape geometry system"
+  ]
+}
