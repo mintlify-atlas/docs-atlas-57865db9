@@ -1,0 +1,191 @@
+---
+title: Export utilities
+description: Utilities for exporting and copying tldraw shapes as images and other formats.
+---
+
+Export utilities provide functions for exporting shapes to various formats and copying them to the clipboard.
+
+## exportAs
+
+Export shapes as downloadable files in various formats.
+
+```typescript
+async function exportAs(
+  editor: Editor,
+  ids: TLShapeId[],
+  opts: ExportAsOptions
+): Promise<void>
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="ids" type="TLShapeId[]" required>
+  The IDs of the shapes to export.
+</ParamField>
+
+<ParamField path="opts" type="ExportAsOptions" required>
+  Export options including format and name.
+</ParamField>
+
+### ExportAsOptions
+
+<ParamField path="opts.format" type="TLExportType" required>
+  The export format (e.g., 'png', 'svg', 'jpeg', 'webp', 'json').
+</ParamField>
+
+<ParamField path="opts.name" type="string">
+  Name of the exported file. If undefined, a predefined name based on the selection will be used.
+</ParamField>
+
+<ParamField path="opts.scale" type="number">
+  Scale factor for the export. Defaults to 1.
+</ParamField>
+
+<ParamField path="opts.quality" type="number">
+  Image quality from 0 to 1 (for formats that support it).
+</ParamField>
+
+<ParamField path="opts.padding" type="number">
+  Padding around the exported shapes in pixels.
+</ParamField>
+
+<ParamField path="opts.background" type="boolean">
+  Whether to include the background.
+</ParamField>
+
+### Example
+
+```typescript
+import { exportAs } from 'tldraw'
+
+// Export selected shapes as PNG
+await exportAs(editor, editor.getSelectedShapeIds(), {
+  format: 'png',
+  name: 'my-diagram',
+  scale: 2,
+  padding: 16
+})
+
+// Export specific shapes as SVG
+await exportAs(editor, ['shape1', 'shape2'], {
+  format: 'svg',
+  name: 'shapes'
+})
+```
+
+## copyAs
+
+Copy shapes to the clipboard in a specific format.
+
+```typescript
+function copyAs(
+  editor: Editor,
+  ids: TLShapeId[],
+  opts: CopyAsOptions
+): Promise<void>
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="ids" type="TLShapeId[]" required>
+  The IDs of the shapes to copy.
+</ParamField>
+
+<ParamField path="opts" type="CopyAsOptions" required>
+  Copy options including format.
+</ParamField>
+
+### CopyAsOptions
+
+<ParamField path="opts.format" type="'svg' | 'png'" required>
+  The format to copy as.
+</ParamField>
+
+<ParamField path="opts.scale" type="number">
+  Scale factor for the copy. Defaults to 1.
+</ParamField>
+
+<ParamField path="opts.quality" type="number">
+  Image quality from 0 to 1 (for PNG format).
+</ParamField>
+
+<ParamField path="opts.padding" type="number">
+  Padding around the copied shapes in pixels.
+</ParamField>
+
+<ParamField path="opts.background" type="boolean">
+  Whether to include the background.
+</ParamField>
+
+### Example
+
+```typescript
+import { copyAs } from 'tldraw'
+
+// Copy selected shapes as PNG to clipboard
+await copyAs(editor, editor.getSelectedShapeIds(), {
+  format: 'png',
+  scale: 2
+})
+
+// Copy as SVG
+await copyAs(editor, ['shape1', 'shape2'], {
+  format: 'svg'
+})
+```
+
+## exportToString
+
+Export shapes to a string representation (SVG or JSON).
+
+```typescript
+async function exportToString(
+  editor: Editor,
+  ids: TLShapeId[],
+  format: 'svg' | 'json',
+  opts?: TLImageExportOptions
+): Promise<string>
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="ids" type="TLShapeId[]" required>
+  The IDs of the shapes to export.
+</ParamField>
+
+<ParamField path="format" type="'svg' | 'json'" required>
+  The export format.
+</ParamField>
+
+<ParamField path="opts" type="TLImageExportOptions">
+  Additional export options.
+</ParamField>
+
+**Returns:** A promise that resolves to the string representation of the shapes.
+
+### Example
+
+```typescript
+import { exportToString } from 'tldraw'
+
+// Export shapes as SVG string
+const svgString = await exportToString(
+  editor,
+  editor.getSelectedShapeIds(),
+  'svg'
+)
+
+// Export shapes as JSON string
+const jsonString = await exportToString(
+  editor,
+  ['shape1', 'shape2'],
+  'json'
+)
+const data = JSON.parse(jsonString)
+```

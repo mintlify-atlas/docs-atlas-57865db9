@@ -1,0 +1,513 @@
+---
+title: Reactive state with signals
+description: Deep dive into @tldraw/state's reactive signal system for managing editor state
+---
+
+The `@tldraw/state` package provides a powerful reactive signals system that manages all state in the tldraw SDK. Understanding signals is essential for building performant, reactive features.
+
+## What are signals?
+
+Signals are reactive values that automatically track dependencies and notify observers when they change. The system consists of three core primitives:
+
+- **Atoms:** Mutable state containers
+- **Computed:** Derived values that update automatically
+- **Reactions:** Side effects that run when dependencies change
+
+```typescript
+import { atom, computed, react } from '@tldraw/state'
+
+// Atom: mutable state
+const count = atom('count', 0)
+
+// Computed: derived value
+const doubled = computed('doubled', () => count.get() * 2)
+
+// Reaction: side effect
+const stop = react('logger', () => {
+  console.log(`Count is ${count.get()}, doubled is ${doubled.get()}`)
+})
+
+count.set(5)
+// Logs: "Count is 5, doubled is 10"
+
+stop() // Clean up the reaction
+```
+
+<Tip>
+All editor state in tldraw is managed through signals, from the current selection to the camera position to custom shape properties.
+</Tip>
+
+## Atoms
+
+Atoms are the foundation of the reactive system. They hold mutable state and notify dependents when changed.
+
+### Creating atoms
+
+```typescript
+import { atom } from '@tldraw/state'
+
+const name = atom('name', 'John')
+const count = atom('count', 0)
+const items = atom('items', ['a', 'b', 'c'])
+```
+
+The first parameter is a debug name (useful for debugging), and the second is the initial value.
+
+### Reading and writing
+
+```typescript
+// Get the current value
+const currentName = name.get() // 'John'
+
+// Set a new value
+name.set('Jane')
+
+// Update based on current value
+count.update(n => n + 1)
+```
+
+<Warning>
+Atom values should be immutable. When updating arrays or objects, create new instances rather than mutating:
+
+```typescript
+// ❌ Bad: mutates the array
+items.update(arr => {
+  arr.push('d')
+  return arr
+})
+
+// ✅ Good: creates new array
+items.update(arr => [...arr, 'd'])
+```
+</Warning>
+
+### Advanced atom options
+
+Atoms can be configured with custom equality checks and history tracking:
+
+```typescript
+import { atom } from '@tldraw/state'
+
+const position = atom(
+  'position',
+  { x: 0, y: 0 },
+  {
+    // Custom equality to avoid unnecessary updates
+    isEqual: (a, b) => a.x === b.x && a.y === b.y,
+    
+    // Track history for time-travel debugging
+    historyLength: 100,
+    
+    // Compute diffs between values
+    computeDiff: (prev, next) => ({
+      dx: next.x - prev.x,
+      dy: next.y - prev.y,
+    }),
+  }
+)
+```
+
+## Computed signals
+
+Computed signals derive their values from other signals and automatically update when dependencies change.
+
+### Basic usage
+
+```typescript
+import { atom, computed } from '@tldraw/state'
+
+const firstName = atom('firstName', 'John')
+const lastName = atom('lastName', 'Doe')
+
+const fullName = computed('fullName', () => {
+  return `${firstName.get()} ${lastName.get()}`
+})
+
+console.log(fullName.get()) // "John Doe"
+
+firstName.set('Jane')
+console.log(fullName.get()) // "Jane Doe"
+```
+
+### Lazy evaluation
+
+Computed signals use lazy evaluation - they only recalculate when accessed AND dependencies have changed:
+
+```typescript
+let computeCount = 0
+
+const expensive = computed('expensive', () => {
+  computeCount++
+  console.log('Computing...')
+  return count.get() * 2
+})
+
+count.set(5)
+count.set(10)
+count.set(15)
+console.log(computeCount) // 0 - not computed yet!
+
+expensive.get() // Logs "Computing..." once
+console.log(computeCount) // 1 - computed when accessed
+```
+
+<Tip>
+This lazy evaluation is key to tldraw's performance. Expensive computations only run when their results are actually needed.
+</Tip>
+
+### Incremental computation
+
+Computed signals can access their previous value for efficient incremental updates:
+
+```typescript
+import { computed, isUninitialized, withDiff } from '@tldraw/state'
+
+const items = atom('items', [1, 2, 3])
+
+const sum = computed('sum', (prevValue, lastComputedEpoch) => {
+  const currentItems = items.get()
+  
+  if (isUninitialized(prevValue)) {
+    // First computation
+    return currentItems.reduce((a, b) => a + b, 0)
+  }
+  
+  // Incremental update based on diff
+  const diff = items.getDiffSince(lastComputedEpoch)
+  // ... use diff to update sum incrementally
+  
+  return newSum
+})
+```
+
+### Computed with custom equality
+
+```typescript
+const bounds = computed(
+  'bounds',
+  () => {
+    const shapes = selectedShapes.get()
+    return calculateBounds(shapes)
+  },
+  {
+    isEqual: (a, b) => {
+      return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
+    },
+  }
+)
+```
+
+### Decorator syntax
+
+Use the `@computed` decorator for class properties:
+
+```typescript
+import { atom, computed } from '@tldraw/state'
+
+class Counter {
+  count = atom('count', 0)
+  max = 100
+  
+  @computed
+  getRemaining() {
+    return this.max - this.count.get()
+  }
+  
+  @computed({ historyLength: 10 })
+  getPercentage() {
+    return (this.count.get() / this.max) * 100
+  }
+}
+
+const counter = new Counter()
+console.log(counter.getRemaining()) // 100
+counter.count.set(30)
+console.log(counter.getRemaining()) // 70
+```
+
+## Reactions
+
+Reactions run side effects when their dependencies change.
+
+### Using react()
+
+```typescript
+import { atom, react } from '@tldraw/state'
+
+const count = atom('count', 0)
+
+const stop = react('update-title', () => {
+  document.title = `Count: ${count.get()}`
+})
+
+count.set(5) // Title updates to "Count: 5"
+count.set(10) // Title updates to "Count: 10"
+
+stop() // Stop reacting to changes
+```
+
+### Scheduled reactions
+
+Defer reactions to animation frames for better performance:
+
+```typescript
+import { react } from '@tldraw/state'
+
+let scheduled = false
+const scheduleEffect = (execute: () => void) => {
+  if (!scheduled) {
+    scheduled = true
+    requestAnimationFrame(() => {
+      scheduled = false
+      execute()
+    })
+  }
+}
+
+const stop = react(
+  'render',
+  () => {
+    // Heavy rendering work
+    renderCanvas(shapes.get())
+  },
+  { scheduleEffect }
+)
+```
+
+### EffectScheduler
+
+For more control over reactions, use `EffectScheduler`:
+
+```typescript
+import { EffectScheduler } from '@tldraw/state'
+
+const scheduler = new EffectScheduler(
+  'my-effect',
+  (lastReactedEpoch) => {
+    console.log('Effect running')
+    console.log('Count:', count.get())
+  },
+  {
+    scheduleEffect: (execute) => {
+      requestAnimationFrame(execute)
+    },
+  }
+)
+
+scheduler.attach() // Start listening
+scheduler.execute() // Run immediately
+
+// Later...
+scheduler.detach() // Stop listening
+```
+
+## Transactions
+
+Transactions batch multiple updates into a single reactive cycle:
+
+```typescript
+import { atom, react, transact } from '@tldraw/state'
+
+const x = atom('x', 0)
+const y = atom('y', 0)
+
+let reactionCount = 0
+react('logger', () => {
+  reactionCount++
+  console.log(`Position: ${x.get()}, ${y.get()}`)
+})
+
+// Without transaction: reaction runs twice
+x.set(10)
+y.set(20)
+console.log(reactionCount) // 3 (initial + 2 updates)
+
+// With transaction: reaction runs once
+transact(() => {
+  x.set(100)
+  y.set(200)
+})
+console.log(reactionCount) // 4 (only 1 more update)
+```
+
+<Tip>
+The editor automatically batches most operations in transactions, so you rarely need to use `transact()` manually when working with editor methods.
+</Tip>
+
+### Transaction abort
+
+Transactions can be rolled back:
+
+```typescript
+import { transaction } from '@tldraw/state'
+
+const name = atom('name', 'John')
+
+const txn = transaction((rollback) => {
+  name.set('Jane')
+  
+  if (someCondition) {
+    rollback() // Reverts to 'John'
+    return
+  }
+  
+  name.set('Alice')
+})
+```
+
+## Using signals in React
+
+The `@tldraw/state-react` package provides React hooks for signals:
+
+```typescript
+import { useValue, useAtom, useComputed } from '@tldraw/state-react'
+import { atom } from '@tldraw/state'
+
+const count = atom('count', 0)
+
+function Counter() {
+  // Subscribe to atom changes
+  const currentCount = useValue('count', () => count.get(), [])
+  
+  return (
+    <div>
+      <p>Count: {currentCount}</p>
+      <button onClick={() => count.set(count.get() + 1)}>
+        Increment
+      </button>
+    </div>
+  )
+}
+```
+
+See the React integration docs for more details.
+
+## Editor state examples
+
+Here's how the editor uses signals internally:
+
+### Selected shapes
+
+```typescript
+// Inside the Editor class
+this._selectedShapeIds = atom('selectedShapeIds', new Set<TLShapeId>())
+
+this.getSelectedShapes = computed('selectedShapes', () => {
+  const ids = this._selectedShapeIds.get()
+  return Array.from(ids).map(id => this.store.get(id)).filter(Boolean)
+})
+```
+
+### Viewport culling
+
+```typescript
+this.getCurrentPageRenderingShapes = computed('renderingShapes', () => {
+  const shapes = this.getCurrentPageShapes()
+  const viewportBounds = this.getViewportPageBounds()
+  
+  return shapes.filter(shape => {
+    const util = this.getShapeUtil(shape)
+    if (!util.canCull(shape)) return true
+    
+    const bounds = this.getShapePageBounds(shape)
+    return bounds && viewportBounds.includes(bounds)
+  })
+})
+```
+
+### Camera following
+
+```typescript
+react('follow-user', () => {
+  const followingUserId = this.getFollowingUserId()
+  if (!followingUserId) return
+  
+  const presence = this.store.get(followingUserId)
+  if (!presence) return
+  
+  this.setCamera(presence.camera, { animation: { duration: 200 } })
+})
+```
+
+## Performance best practices
+
+### Avoid unnecessary dependencies
+
+```typescript
+// ❌ Bad: depends on entire array when only length matters
+const hasItems = computed('hasItems', () => {
+  return items.get().length > 0
+})
+
+// ✅ Better: store length separately if checked frequently
+const itemCount = computed('itemCount', () => items.get().length)
+const hasItems = computed('hasItems', () => itemCount.get() > 0)
+```
+
+### Use custom equality for objects
+
+```typescript
+const settings = atom(
+  'settings',
+  { theme: 'light', fontSize: 14 },
+  {
+    isEqual: (a, b) => {
+      return a.theme === b.theme && a.fontSize === b.fontSize
+    },
+  }
+)
+```
+
+### Debounce expensive reactions
+
+```typescript
+import { debounce } from '@tldraw/utils'
+
+const debouncedSave = debounce((data: string) => {
+  localStorage.setItem('data', data)
+}, 1000)
+
+react('auto-save', () => {
+  const data = editor.getSnapshot()
+  debouncedSave(JSON.stringify(data))
+})
+```
+
+## Debugging signals
+
+Use `whyAmIRunning()` to debug unexpected recomputations:
+
+```typescript
+import { computed, whyAmIRunning } from '@tldraw/state'
+
+const expensive = computed('expensive', () => {
+  whyAmIRunning() // Logs dependency tree
+  return somethingExpensive()
+})
+```
+
+<Accordion title="Example debug output">
+```
+expensive is running because:
+  - selectedShapeIds changed (epoch 42 -> 43)
+    - last value: Set { 'shape1' }
+    - new value: Set { 'shape1', 'shape2' }
+```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/advanced/architecture">
+    Understand the overall system architecture
+  </Card>
+  <Card title="Performance" icon="gauge-high" href="/advanced/performance">
+    Optimize your tldraw application
+  </Card>
+  <Card title="Store" icon="database" href="/store/overview">
+    Learn about the reactive store
+  </Card>
+  <Card title="React integration" icon="react" href="/react/hooks">
+    Use signals in React components
+  </Card>
+</CardGroup>

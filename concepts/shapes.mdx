@@ -1,0 +1,588 @@
+---
+title: Shapes
+description: The shape system in tldraw allows you to define custom shape types with their own geometry, rendering, and interaction behavior through ShapeUtil classes.
+---
+
+Shapes are the visual elements users create and interact with on the canvas. Each shape type (rectangle, arrow, text, etc.) is defined by a `ShapeUtil` class that controls its behavior, geometry, and rendering.
+
+## Overview
+
+The shape system in tldraw is highly extensible:
+
+- **Shape records**: Data stored in the reactive store (position, size, props)
+- **ShapeUtil classes**: Define behavior for each shape type
+- **Geometry system**: Calculate bounds, hitboxes, and collision detection
+- **Rendering**: HTML and SVG components for display
+- **Migrations**: Handle schema changes over time
+
+## Anatomy of a shape
+
+Every shape has two parts:
+
+### 1. Shape record (data)
+
+Stored in the Editor's store:
+
+```tsx
+interface TLGeoShape extends TLBaseShape<'geo', TLGeoShapeProps> {
+  type: 'geo'
+  props: {
+    w: number
+    h: number
+    geo: 'rectangle' | 'ellipse' | 'triangle' | ...
+    color: string
+    fill: string
+    // ... other props
+  }
+}
+```
+
+### 2. ShapeUtil class (behavior)
+
+Defines how the shape works:
+
+```tsx
+import { BaseBoxShapeUtil, TLGeoShape } from '@tldraw/editor'
+
+export class GeoShapeUtil extends BaseBoxShapeUtil<TLGeoShape> {
+  static override type = 'geo' as const
+  static override props = geoShapeProps
+  
+  getDefaultProps(): TLGeoShape['props'] {
+    return {
+      w: 100,
+      h: 100,
+      geo: 'rectangle',
+      color: 'black',
+      fill: 'none'
+    }
+  }
+  
+  getGeometry(shape: TLGeoShape) {
+    // Return geometry for bounds, hit testing, etc.
+  }
+  
+  component(shape: TLGeoShape) {
+    // Return JSX to render the shape
+  }
+  
+  indicator(shape: TLGeoShape) {
+    // Return SVG for selection indicator
+  }
+}
+```
+
+## Creating a custom shape
+
+Here's a complete example of a custom star shape:
+
+<Steps>
+
+### Define the shape type
+
+Define your shape's props and TypeScript types:
+
+```tsx
+import { TLBaseShape, T } from '@tldraw/editor'
+
+type StarShape = TLBaseShape<
+  'star',
+  {
+    w: number
+    h: number
+    points: number
+    color: string
+  }
+>
+
+const starShapeProps = {
+  w: T.number,
+  h: T.number,
+  points: T.number,
+  color: T.string
+}
+```
+
+### Create the ShapeUtil class
+
+Implement the required methods:
+
+```tsx
+import { 
+  ShapeUtil, 
+  Polygon2d, 
+  SVGContainer,
+  HTMLContainer 
+} from '@tldraw/editor'
+
+export class StarShapeUtil extends ShapeUtil<StarShape> {
+  static override type = 'star' as const
+  static override props = starShapeProps
+  
+  getDefaultProps(): StarShape['props'] {
+    return {
+      w: 100,
+      h: 100,
+      points: 5,
+      color: 'black'
+    }
+  }
+  
+  getGeometry(shape: StarShape) {
+    const { w, h, points } = shape.props
+    const vertices = []
+    
+    // Calculate star vertices
+    for (let i = 0; i < points * 2; i++) {
+      const angle = (i * Math.PI) / points
+      const radius = i % 2 === 0 ? 0.5 : 0.2
+      vertices.push([
+        (Math.cos(angle) * radius + 0.5) * w,
+        (Math.sin(angle) * radius + 0.5) * h
+      ])
+    }
+    
+    return new Polygon2d({
+      points: vertices,
+      isFilled: true
+    })
+  }
+  
+  component(shape: StarShape) {
+    const geometry = this.getGeometry(shape)
+    const pathData = 'M' + geometry.vertices.map(v => `${v.x},${v.y}`).join('L') + 'Z'
+    
+    return (
+      <SVGContainer>
+        <path
+          d={pathData}
+          fill="none"
+          stroke={shape.props.color}
+          strokeWidth={2}
+        />
+      </SVGContainer>
+    )
+  }
+  
+  indicator(shape: StarShape) {
+    const geometry = this.getGeometry(shape)
+    const pathData = 'M' + geometry.vertices.map(v => `${v.x},${v.y}`).join('L') + 'Z'
+    
+    return <path d={pathData} />
+  }
+}
+```
+
+### Register the shape
+
+Add your ShapeUtil when creating the editor:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { StarShapeUtil } from './StarShapeUtil'
+
+function App() {
+  return (
+    <Tldraw
+      shapeUtils={[StarShapeUtil]}
+      onMount={(editor) => {
+        // Create a star shape
+        editor.createShape({
+          type: 'star',
+          x: 100,
+          y: 100,
+          props: { w: 200, h: 200, points: 7 }
+        })
+      }}
+    />
+  )
+}
+```
+
+</Steps>
+
+## ShapeUtil methods
+
+### Required methods
+
+These methods must be implemented:
+
+```tsx
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  // Default prop values
+  getDefaultProps(): MyShape['props']
+  
+  // Geometry for bounds and hit testing
+  getGeometry(shape: MyShape): Geometry2d
+  
+  // Render the shape (HTML or SVG)
+  component(shape: MyShape): React.ReactElement
+  
+  // Selection indicator (SVG only)
+  indicator(shape: MyShape): React.ReactElement
+}
+```
+
+### Optional methods
+
+Customize behavior with these optional methods:
+
+```tsx
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  // Can the shape be edited (e.g., text input)?
+  canEdit() { return true }
+  
+  // Can the shape be resized?
+  canResize() { return true }
+  
+  // Can the shape be cropped?
+  canCrop() { return false }
+  
+  // Can bindings attach to this shape?
+  canBind({ bindingType, fromShape, toShape }) {
+    return bindingType === 'arrow'
+  }
+  
+  // Handle resize
+  onResize(shape: MyShape, info: TLResizeInfo<MyShape>) {
+    return {
+      ...shape,
+      props: {
+        w: info.newBounds.width,
+        h: info.newBounds.height
+      }
+    }
+  }
+  
+  // Handle rotation
+  onRotate(shape: MyShape, rotation: number) {
+    // Custom rotation behavior
+  }
+  
+  // Called when shape is double-clicked
+  onDoubleClick(shape: MyShape) {
+    this.editor.setEditingShape(shape.id)
+  }
+  
+  // Called when editing starts
+  onEditEnd(shape: MyShape) {
+    // Cleanup after editing
+  }
+}
+```
+
+## Geometry system
+
+The geometry system handles shape bounds, hit testing, and collisions:
+
+### Available geometry types
+
+```tsx
+import {
+  Rectangle2d,
+  Polygon2d,
+  Ellipse2d,
+  Edge2d,
+  Polyline2d,
+  Group2d
+} from '@tldraw/editor'
+
+// Rectangle
+getGeometry(shape: RectShape) {
+  return new Rectangle2d({
+    width: shape.props.w,
+    height: shape.props.h,
+    isFilled: true
+  })
+}
+
+// Ellipse
+getGeometry(shape: EllipseShape) {
+  return new Ellipse2d({
+    width: shape.props.w,
+    height: shape.props.h,
+    isFilled: true
+  })
+}
+
+// Polygon (for custom shapes)
+getGeometry(shape: CustomShape) {
+  const vertices = calculateVertices(shape)
+  return new Polygon2d({
+    points: vertices,
+    isFilled: true
+  })
+}
+
+// Composite geometry
+getGeometry(shape: ComplexShape) {
+  return new Group2d({
+    children: [
+      new Rectangle2d({ /* ... */ }),
+      new Ellipse2d({ /* ... */ })
+    ]
+  })
+}
+```
+
+### Using geometry
+
+The editor uses geometry for:
+
+```tsx
+// Get shape bounds
+const bounds = editor.getShapeGeometry(shape).bounds
+
+// Hit testing
+const isHit = editor.isPointInShape(
+  shape,
+  { x: 100, y: 100 },
+  { hitInside: true }
+)
+
+// Selection intersection
+const intersects = editor.getShapeGeometry(shape)
+  .hitTestLineSegment(lineStart, lineEnd)
+```
+
+## Rendering shapes
+
+### HTML rendering
+
+Use `HTMLContainer` for HTML-based shapes:
+
+```tsx
+import { HTMLContainer } from '@tldraw/editor'
+
+component(shape: MyShape) {
+  return (
+    <HTMLContainer>
+      <div
+        style={{
+          width: shape.props.w,
+          height: shape.props.h,
+          background: shape.props.color,
+          borderRadius: '8px'
+        }}
+      >
+        {shape.props.text}
+      </div>
+    </HTMLContainer>
+  )
+}
+```
+
+### SVG rendering
+
+Use `SVGContainer` for SVG-based shapes:
+
+```tsx
+import { SVGContainer } from '@tldraw/editor'
+
+component(shape: MyShape) {
+  return (
+    <SVGContainer>
+      <rect
+        width={shape.props.w}
+        height={shape.props.h}
+        fill={shape.props.color}
+        rx={8}
+      />
+    </SVGContainer>
+  )
+}
+```
+
+### Performance optimization
+
+For complex shapes, use level-of-detail (LOD) rendering:
+
+```tsx
+import { useValue } from '@tldraw/state-react'
+
+component(shape: ComplexShape) {
+  const editor = this.editor
+  const zoom = useValue('zoom', () => editor.getZoomLevel(), [editor])
+  
+  // Simplified rendering at low zoom
+  if (zoom < 0.2) {
+    return <SimplifiedComponent shape={shape} />
+  }
+  
+  // Full detail at normal zoom
+  return <DetailedComponent shape={shape} />
+}
+```
+
+## Shape props and styles
+
+### Defining props
+
+Use validators to define shape props:
+
+```tsx
+import { T, StyleProp, DefaultColorStyle } from '@tldraw/editor'
+
+const myShapeProps = {
+  w: T.number,
+  h: T.number,
+  color: DefaultColorStyle,  // Shared style
+  text: T.string,
+  opacity: T.number
+}
+```
+
+### Style props
+
+Style props are remembered between shapes and can be set on multiple shapes:
+
+```tsx
+import { DefaultColorStyle, DefaultSizeStyle } from '@tldraw/editor'
+
+static override props = {
+  color: DefaultColorStyle,   // red, blue, green, etc.
+  size: DefaultSizeStyle,     // s, m, l, xl
+  // ... other props
+}
+
+// Set style on multiple shapes
+editor.setStyleForSelectedShapes(DefaultColorStyle, 'red')
+editor.setStyleForSelectedShapes(DefaultSizeStyle, 'l')
+```
+
+## BaseBoxShapeUtil
+
+For rectangular shapes, extend `BaseBoxShapeUtil` for built-in resize handles:
+
+```tsx
+import { BaseBoxShapeUtil } from '@tldraw/editor'
+
+export class CardShapeUtil extends BaseBoxShapeUtil<CardShape> {
+  static override type = 'card'
+  
+  getDefaultProps() {
+    return { w: 200, h: 100, title: '' }
+  }
+  
+  getGeometry(shape: CardShape) {
+    return new Rectangle2d({
+      width: shape.props.w,
+      height: shape.props.h,
+      isFilled: true
+    })
+  }
+  
+  component(shape: CardShape) {
+    return (
+      <HTMLContainer>
+        <div style={{ width: shape.props.w, height: shape.props.h }}>
+          {shape.props.title}
+        </div>
+      </HTMLContainer>
+    )
+  }
+  
+  indicator(shape: CardShape) {
+    return (
+      <rect
+        width={shape.props.w}
+        height={shape.props.h}
+      />
+    )
+  }
+}
+```
+
+## Real-world example: Arrow shape
+
+The built-in arrow shape demonstrates advanced features:
+
+```tsx
+export class ArrowShapeUtil extends ShapeUtil<TLArrowShape> {
+  static override type = 'arrow' as const
+  static override props = arrowShapeProps
+  
+  // Arrows can bind to other shapes
+  canBind({ toShape }: TLShapeUtilCanBindOpts) {
+    return toShape.type !== 'arrow'
+  }
+  
+  getGeometry(shape: TLArrowShape) {
+    const info = getArrowInfo(shape)
+    
+    return new Group2d({
+      children: [
+        new Polyline2d({ points: info.bodyPath }),
+        // Add arrowhead geometry
+        info.startArrowhead && new Polygon2d({ 
+          points: info.startArrowhead.vertices 
+        }),
+        info.endArrowhead && new Polygon2d({ 
+          points: info.endArrowhead.vertices 
+        })
+      ].filter(Boolean)
+    })
+  }
+  
+  component(shape: TLArrowShape) {
+    const info = getArrowInfo(shape)
+    
+    return (
+      <SVGContainer>
+        <path
+          d={getArrowBodyPath(info)}
+          stroke={shape.props.color}
+          strokeWidth={STROKE_SIZES[shape.props.size]}
+        />
+        {/* Render arrowheads */}
+      </SVGContainer>
+    )
+  }
+  
+  // Custom handles for arrow endpoints
+  getHandles(shape: TLArrowShape) {
+    return [
+      { id: 'start', type: 'vertex', x: shape.props.start.x, y: shape.props.start.y },
+      { id: 'end', type: 'vertex', x: shape.props.end.x, y: shape.props.end.y }
+    ]
+  }
+  
+  onHandleDrag(shape: TLArrowShape, { handle, delta }: TLHandleDragInfo) {
+    const updates = { ...shape.props }
+    
+    if (handle.id === 'start') {
+      updates.start = { 
+        x: shape.props.start.x + delta.x, 
+        y: shape.props.start.y + delta.y 
+      }
+    }
+    
+    return { ...shape, props: updates }
+  }
+}
+```
+
+## Best practices
+
+<Note>
+**Keep geometry simple**: Complex geometry calculations can slow down the editor. Use simple bounding boxes for hit testing when possible.
+</Note>
+
+<Note>
+**Memoize expensive calculations**: Use `useMemo` or computed values for calculations in the `component` method.
+</Note>
+
+<Note>
+**Style consistency**: Use the built-in style props (color, size, etc.) for consistent appearance across shapes.
+</Note>
+
+<Info>
+**Testing**: Always test your shapes with selection, resizing, rotation, and grouping to ensure they behave correctly.
+</Info>
+
+## Related
+
+- [Editor](/concepts/editor) - Working with the Editor API
+- [Bindings](/concepts/bindings) - Connecting shapes together
+- [Tools](/concepts/tools) - Creating custom shape creation tools
+- [Shape API](/api-reference/shapes) - Complete shape API reference

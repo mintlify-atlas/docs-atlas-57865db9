@@ -1,0 +1,198 @@
+---
+title: Controlled editor
+description: Control the tldraw editor programmatically using the Editor API
+---
+
+The editor instance provides a comprehensive API for controlling the canvas programmatically. Access it through the `onMount` callback or `useEditor` hook.
+
+## Using onMount
+
+The `onMount` prop gives you access to the editor instance when the component mounts:
+
+```tsx APIExample.tsx
+import {
+  Editor,
+  Tldraw,
+  createShapeId,
+  toRichText,
+  TLGeoShape,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function APIExample() {
+  const handleMount = (editor: Editor) => {
+    // Create a shape id
+    const id = createShapeId('hello')
+
+    // Create a shape
+    editor.createShapes([{
+      id,
+      type: 'geo',
+      x: 128,
+      y: 128,
+      props: {
+        geo: 'rectangle',
+        w: 120,
+        h: 100,
+        dash: 'draw',
+        color: 'blue',
+        size: 'm',
+      },
+    }])
+
+    // Get the created shape
+    const shape = editor.getShape<TLGeoShape>(id)!
+
+    // Update the shape
+    editor.updateShape({
+      id,
+      type: 'geo',
+      props: {
+        h: shape.props.h * 3,
+        richText: toRichText('hello world!'),
+      },
+    })
+
+    // Rotate the shape around its center
+    editor.rotateShapesBy([id], Math.PI / 8)
+
+    // Zoom the camera to fit the shape
+    editor.zoomToFit()
+
+    // Select the shape
+    editor.select(id)
+  }
+
+  return (
+    <div className="tldraw__editor">
+      <Tldraw persistenceKey="api-example" onMount={handleMount} />
+    </div>
+  )
+}
+```
+
+## Using useEditor hook
+
+Inside the Tldraw component's children, you can use the `useEditor` hook to access the editor instance:
+
+```tsx
+import { useEditor, DefaultColorStyle } from 'tldraw'
+import { useEffect } from 'react'
+
+const InsideOfEditorContext = () => {
+  const editor = useEditor()
+
+  useEffect(() => {
+    let i = 0
+
+    const interval = setInterval(() => {
+      const selection = [...editor.getSelectedShapeIds()]
+      editor.selectAll()
+      editor.setStyleForSelectedShapes(
+        DefaultColorStyle,
+        i % 2 ? 'blue' : 'light-blue'
+      )
+      editor.setStyleForNextShapes(
+        DefaultColorStyle,
+        i % 2 ? 'blue' : 'light-blue'
+      )
+      editor.setSelectedShapes(selection)
+      i++
+    }, 1000)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [editor])
+
+  return null
+}
+
+// Use it as a child of Tldraw
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <InsideOfEditorContext />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Common editor methods
+
+### Creating shapes
+
+```tsx
+editor.createShapes([{
+  type: 'geo',
+  x: 100,
+  y: 100,
+  props: { w: 100, h: 100 },
+}])
+```
+
+### Updating shapes
+
+```tsx
+editor.updateShape({
+  id: shapeId,
+  type: 'geo',
+  props: { w: 200 },
+})
+```
+
+### Selecting shapes
+
+```tsx
+// Select specific shapes
+editor.select(shapeId1, shapeId2)
+
+// Select all
+editor.selectAll()
+
+// Clear selection
+editor.selectNone()
+```
+
+### Deleting shapes
+
+```tsx
+editor.deleteShapes([shapeId1, shapeId2])
+```
+
+### Camera controls
+
+```tsx
+// Zoom to fit all content
+editor.zoomToFit()
+
+// Zoom to selection
+editor.zoomToSelection()
+
+// Set zoom level
+editor.setCamera({ x: 0, y: 0, z: 1 })
+```
+
+### Tool management
+
+```tsx
+// Set current tool
+editor.setCurrentTool('select')
+editor.setCurrentTool('draw')
+editor.setCurrentTool('eraser')
+
+// Get current tool
+const currentTool = editor.getCurrentToolId()
+```
+
+<Note>
+The Editor instance is the "god object" for tldraw. It provides access to almost everything you can do in the editor, including shape manipulation, camera controls, tool management, and state observation.
+</Note>
+
+## Related
+
+- [Custom tool](/examples/custom-tool) - Build your own tools
+- [Read-only mode](/examples/readonly-mode) - Disable editing
+- [Editor API reference](/reference/editor/Editor)

@@ -1,0 +1,247 @@
+---
+title: ArrowBindingUtil
+description: Binding util for arrow shapes that connects arrows to other shapes and manages their lifecycle.
+---
+
+`ArrowBindingUtil` is the binding utility class for arrow bindings in tldraw. It handles the relationship between arrow shapes and the shapes they point to, managing updates, reparenting, and isolation when bound shapes change or are deleted.
+
+## Type
+
+```typescript
+class ArrowBindingUtil extends BindingUtil<TLArrowBinding>
+```
+
+## Static properties
+
+<ParamField path="type" type="'arrow'" required>
+  The type identifier for arrow bindings.
+</ParamField>
+
+<ParamField path="props" type="RecordProps<TLArrowBinding>" required>
+  Validation schema for arrow binding properties.
+</ParamField>
+
+<ParamField path="migrations" type="TLPropsMigrations" required>
+  Migration definitions for arrow binding schema changes.
+</ParamField>
+
+## Methods
+
+### getDefaultProps()
+
+```typescript
+getDefaultProps(): Partial<TLArrowBindingProps>
+```
+
+Returns the default properties for arrow bindings.
+
+**Returns:** `Partial<TLArrowBindingProps>`
+
+```typescript
+{
+  isPrecise: false,
+  isExact: false,
+  normalizedAnchor: { x: 0.5, y: 0.5 },
+  snap: 'none'
+}
+```
+
+<ParamField path="isPrecise" type="boolean" default={false}>
+  Whether the binding uses precise positioning.
+</ParamField>
+
+<ParamField path="isExact" type="boolean" default={false}>
+  Whether the binding is exact.
+</ParamField>
+
+<ParamField path="normalizedAnchor" type="{ x: number; y: number }" default="{ x: 0.5, y: 0.5 }">
+  The normalized anchor point on the bound shape (0-1 range).
+</ParamField>
+
+<ParamField path="snap" type="string" default="'none'">
+  The snap behavior for the binding.
+</ParamField>
+
+### onAfterCreate()
+
+```typescript
+onAfterCreate({ binding }: BindingOnCreateOptions<TLArrowBinding>): void
+```
+
+Called after an arrow binding has been created. Updates the arrow shape to reflect the new binding.
+
+<ParamField path="binding" type="TLArrowBinding" required>
+  The arrow binding that was created.
+</ParamField>
+
+### onAfterChange()
+
+```typescript
+onAfterChange({ bindingAfter }: BindingOnChangeOptions<TLArrowBinding>): void
+```
+
+Called after the binding itself changes. Updates the arrow shape to reflect the binding changes.
+
+<ParamField path="bindingAfter" type="TLArrowBinding" required>
+  The arrow binding after the change.
+</ParamField>
+
+### onAfterChangeFromShape()
+
+```typescript
+onAfterChangeFromShape({
+  shapeBefore,
+  shapeAfter,
+  reason
+}: BindingOnShapeChangeOptions<TLArrowBinding>): void
+```
+
+Called after the arrow itself changes. Updates the arrow's parent and index if needed.
+
+This method includes a performance optimization: when translating arrows together with their bound shapes, only x/y positions change. In this case, bindings remain valid and no reparenting is needed.
+
+<ParamField path="shapeBefore" type="TLArrowShape" required>
+  The arrow shape before the change.
+</ParamField>
+
+<ParamField path="shapeAfter" type="TLArrowShape" required>
+  The arrow shape after the change.
+</ParamField>
+
+<ParamField path="reason" type="'self' | 'ancestry'" required>
+  Why the shape changed. `'self'` means the arrow itself changed, `'ancestry'` means the arrow's parent changed.
+</ParamField>
+
+### onAfterChangeToShape()
+
+```typescript
+onAfterChangeToShape({
+  binding,
+  shapeBefore,
+  shapeAfter,
+  reason
+}: BindingOnShapeChangeOptions<TLArrowBinding>): void
+```
+
+Called after the shape an arrow is bound to changes. Reparents the arrow if necessary to maintain the correct parent-child relationship.
+
+<ParamField path="binding" type="TLArrowBinding" required>
+  The arrow binding.
+</ParamField>
+
+<ParamField path="shapeBefore" type="TLShape" required>
+  The bound shape before the change.
+</ParamField>
+
+<ParamField path="shapeAfter" type="TLShape" required>
+  The bound shape after the change.
+</ParamField>
+
+<ParamField path="reason" type="'self' | 'ancestry'" required>
+  Why the shape changed.
+</ParamField>
+
+### onBeforeIsolateFromShape()
+
+```typescript
+onBeforeIsolateFromShape({
+  binding
+}: BindingOnShapeIsolateOptions<TLArrowBinding>): void
+```
+
+Called when the arrow is being isolated from its bound shape (e.g., when the bound shape is deleted or the arrow is copied without the bound shape). Updates the arrow's terminal position to maintain its visual appearance.
+
+<ParamField path="binding" type="TLArrowBinding" required>
+  The arrow binding being isolated.
+</ParamField>
+
+## Behavior
+
+### Reparenting logic
+
+Arrows are automatically reparented based on their bindings:
+
+- **Two bindings**: The arrow is parented to the closest common ancestor of both bound shapes
+- **One binding**: The arrow stays on its current page if it shares a parent with the bound shape, otherwise it moves to its ancestor page
+- **No bindings**: No reparenting occurs
+
+### Z-index management
+
+Arrows are positioned just above their bound shapes in the z-order:
+
+- The arrow is placed above the highest bound shape
+- If there are siblings above the bound shape, the arrow is inserted between them
+- Multiple arrows bound to the same shape avoid fighting for the same index
+
+### Unbinding behavior
+
+Arrows are automatically unbound when:
+
+- The bound shape is deleted
+- The bound shape moves to a different page than the arrow
+- The arrow is isolated (copied/duplicated without the bound shape)
+
+When unbound, the arrow's terminal position is updated to maintain its visual appearance.
+
+## Example
+
+```typescript
+import { Tldraw } from '@tldraw/tldraw'
+import '@tldraw/tldraw/tldraw.css'
+
+function App() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        // Create a shape
+        const boxId = editor.createShape({
+          type: 'geo',
+          x: 100,
+          y: 100,
+          props: { w: 100, h: 100 }
+        }).id
+        
+        // Create an arrow
+        const arrowId = editor.createShape({
+          type: 'arrow',
+          x: 0,
+          y: 0,
+          props: {
+            start: { x: 0, y: 0 },
+            end: { x: 100, y: 100 }
+          }
+        }).id
+        
+        // Create a binding from the arrow to the box
+        editor.createBinding({
+          type: 'arrow',
+          fromId: arrowId,
+          toId: boxId,
+          props: {
+            terminal: 'end',
+            isPrecise: true,
+            isExact: false,
+            normalizedAnchor: { x: 0.5, y: 0.5 },
+            snap: 'none'
+          }
+        })
+        
+        // Now when you move the box, the arrow follows
+        editor.updateShape({
+          id: boxId,
+          type: 'geo',
+          x: 300,
+          y: 300
+        })
+      }}
+    />
+  )
+}
+```
+
+## Related types
+
+- `TLArrowBinding` - The arrow binding record type
+- `TLArrowBindingProps` - Properties for arrow bindings
+- `TLArrowShape` - The arrow shape type
+- `BindingUtil` - Base class for all binding utilities

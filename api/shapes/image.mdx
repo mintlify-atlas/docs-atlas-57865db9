@@ -1,0 +1,361 @@
+---
+title: ImageShapeUtil
+description: Shape utility for image shapes with cropping and flipping support
+---
+
+`ImageShapeUtil` handles image shapes with support for cropping, circular crops, flipping, and animated images.
+
+## Type signature
+
+```typescript
+class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape>
+```
+
+## Features
+
+- Image rendering from assets
+- Rectangular and circular cropping
+- Horizontal and vertical flipping
+- Animated image support (GIF, APNG)
+- Transparency-aware hit testing
+- Alt text for accessibility
+- Optional URL linking
+
+## Default props
+
+```typescript
+getDefaultProps(): TLImageShape['props'] {
+  return {
+    w: 100,
+    h: 100,
+    assetId: null,
+    playing: true,
+    url: '',
+    crop: null,
+    flipX: false,
+    flipY: false,
+    altText: '',
+  }
+}
+```
+
+## Properties
+
+<ParamField path="w" type="number" required>
+  Width of the image shape.
+</ParamField>
+
+<ParamField path="h" type="number" required>
+  Height of the image shape.
+</ParamField>
+
+<ParamField path="assetId" type="TLAssetId | null" required>
+  ID of the associated image asset.
+</ParamField>
+
+<ParamField path="crop" type="TLShapeCrop | null" default="null">
+  Crop settings defining the visible portion:
+  ```typescript
+  {
+    topLeft: { x: number, y: number },    // 0-1 normalized
+    bottomRight: { x: number, y: number }, // 0-1 normalized
+    isCircle?: boolean
+  }
+  ```
+</ParamField>
+
+<ParamField path="flipX" type="boolean" default="false">
+  Whether to flip the image horizontally.
+</ParamField>
+
+<ParamField path="flipY" type="boolean" default="false">
+  Whether to flip the image vertically.
+</ParamField>
+
+<ParamField path="playing" type="boolean" default="true">
+  Whether animated images should play.
+</ParamField>
+
+<ParamField path="url" type="string" default="''">
+  Optional URL for hyperlinking.
+</ParamField>
+
+<ParamField path="altText" type="string" default="''">
+  Alternative text for accessibility.
+</ParamField>
+
+## Geometry
+
+Image shapes have different geometry based on crop and transparency:
+
+### Circular crop
+```typescript
+new Ellipse2d({
+  width: shape.props.w,
+  height: shape.props.h,
+  isFilled: true,
+})
+```
+
+### Transparent PNG/WebP/GIF (alpha-aware)
+```typescript
+new ImageRectangle2d({
+  width: shape.props.w,
+  height: shape.props.h,
+  isFilled: true,
+  alphaDataGetter: () => getAlphaData(src),
+  crop: shape.props.crop,
+  flipX: shape.props.flipX,
+  flipY: shape.props.flipY,
+})
+```
+
+### Standard rectangle
+```typescript
+new Rectangle2d({
+  width: shape.props.w,
+  height: shape.props.h,
+  isFilled: true,
+})
+```
+
+## Methods
+
+### isAspectRatioLocked()
+
+```typescript
+isAspectRatioLocked() {
+  return true
+}
+```
+
+Image aspect ratio is locked to prevent distortion.
+
+### canCrop()
+
+```typescript
+canCrop() {
+  return true
+}
+```
+
+Images can be cropped.
+
+### isExportBoundsContainer()
+
+```typescript
+isExportBoundsContainer(): boolean {
+  return true
+}
+```
+
+When exporting, images act as bounds containers to avoid extra padding.
+
+### getAriaDescriptor()
+
+```typescript
+getAriaDescriptor(shape: TLImageShape) {
+  return shape.props.altText
+}
+```
+
+Returns alt text for accessibility.
+
+### onResize()
+
+Handles resizing with flip and crop adjustments:
+
+```typescript
+onResize(shape: TLImageShape, info: TLResizeInfo<TLImageShape>) {
+  let resized: TLImageShape = resizeBox(shape, info)
+  const { flipX, flipY } = info.initialShape.props
+  const { scaleX, scaleY, mode } = info
+
+  // Update flip states
+  resized = {
+    ...resized,
+    props: {
+      ...resized.props,
+      flipX: scaleX < 0 !== flipX,
+      flipY: scaleY < 0 !== flipY,
+    },
+  }
+  
+  if (!shape.props.crop) return resized
+
+  // Adjust crop when flipping
+  const flipCropHorizontally = /* ... */
+  const flipCropVertically = /* ... */
+
+  const { topLeft, bottomRight } = shape.props.crop
+  resized.props.crop = {
+    topLeft: {
+      x: flipCropHorizontally ? 1 - bottomRight.x : topLeft.x,
+      y: flipCropVertically ? 1 - bottomRight.y : topLeft.y,
+    },
+    bottomRight: {
+      x: flipCropHorizontally ? 1 - topLeft.x : bottomRight.x,
+      y: flipCropVertically ? 1 - topLeft.y : bottomRight.y,
+    },
+    isCircle: shape.props.crop.isCircle,
+  }
+  return resized
+}
+```
+
+### onDoubleClickEdge()
+
+When cropping, double-clicking an edge resets crop to full image:
+
+```typescript
+onDoubleClickEdge(shape: TLImageShape) {
+  if (this.editor.getCroppingShapeId() !== shape.id) return
+
+  const crop = shape.props.crop || {
+    topLeft: { x: 0, y: 0 },
+    bottomRight: { x: 1, y: 1 },
+  }
+
+  const { w, h } = getUncroppedSize(shape.props, crop)
+  const pointDelta = new Vec(crop.topLeft.x * w, crop.topLeft.y * h).rot(shape.rotation)
+
+  return {
+    id: shape.id,
+    type: shape.type,
+    x: shape.x - pointDelta.x,
+    y: shape.y - pointDelta.y,
+    props: {
+      crop: { topLeft: { x: 0, y: 0 }, bottomRight: { x: 1, y: 1 } },
+      w,
+      h,
+    },
+  }
+}
+```
+
+## Indicator
+
+Hides indicator when cropping:
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLImageShape): Path2D | undefined {
+  if (this.editor.getCroppingShapeId() === shape.id) return undefined
+
+  const path = new Path2D()
+  if (shape.props.crop?.isCircle) {
+    const cx = shape.props.w / 2
+    const cy = shape.props.h / 2
+    path.ellipse(cx, cy, cx, cy, 0, 0, Math.PI * 2)
+  } else {
+    path.rect(0, 0, shape.props.w, shape.props.h)
+  }
+  return path
+}
+```
+
+## Export
+
+### toSvg()
+
+Exports image as embedded data URL in SVG:
+
+```typescript
+async toSvg(shape: TLImageShape, ctx: SvgExportContext) {
+  const props = shape.props
+  if (!props.assetId) return null
+
+  const asset = this.editor.getAsset(props.assetId)
+  if (!asset) return null
+
+  const { w } = getUncroppedSize(shape.props, props.crop)
+  let src = await ctx.resolveAssetUrl(asset.id, w)
+  
+  // Convert to data URL if needed
+  if (src.startsWith('blob:') || src.startsWith('http')) {
+    src = await getDataURIFromURL(src)
+  }
+
+  // Get first frame for animated images
+  if (getIsAnimated(this.editor, asset.id)) {
+    const { promise } = getFirstFrameOfAnimatedImage(src)
+    src = await promise
+  }
+
+  return <SvgImage shape={shape} src={src} />
+}
+```
+
+## Example: Create image shapes
+
+```typescript
+// Create image from asset
+const assetId = await editor.createImageAsset(file)
+editor.createShape({
+  type: 'image',
+  props: {
+    assetId,
+    w: 400,
+    h: 300,
+    altText: 'A beautiful landscape',
+  }
+})
+
+// Create cropped image
+editor.createShape({
+  type: 'image',
+  props: {
+    assetId,
+    w: 200,
+    h: 200,
+    crop: {
+      topLeft: { x: 0.25, y: 0.25 },
+      bottomRight: { x: 0.75, y: 0.75 },
+    },
+  }
+})
+
+// Create circular image
+editor.createShape({
+  type: 'image',
+  props: {
+    assetId,
+    w: 200,
+    h: 200,
+    crop: {
+      topLeft: { x: 0, y: 0 },
+      bottomRight: { x: 1, y: 1 },
+      isCircle: true,
+    },
+  }
+})
+```
+
+## Example: Flip and crop
+
+```typescript
+// Flip image horizontally
+editor.updateShape({
+  id: imageShape.id,
+  type: 'image',
+  props: { flipX: true },
+})
+
+// Start cropping
+editor.setCroppingShape(imageShape.id)
+
+// Reset crop
+editor.updateShape({
+  id: imageShape.id,
+  type: 'image',
+  props: {
+    crop: {
+      topLeft: { x: 0, y: 0 },
+      bottomRight: { x: 1, y: 1 },
+    },
+  },
+})
+```

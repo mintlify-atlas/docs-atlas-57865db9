@@ -1,0 +1,93 @@
+---
+title: Basic setup
+description: Get started with a minimal tldraw editor implementation
+---
+
+The simplest way to get started with tldraw is to import the `Tldraw` component and render it with the required CSS.
+
+## Basic implementation
+
+```tsx BasicExample.tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function BasicExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw />
+    </div>
+  )
+}
+```
+
+## What you get
+
+With this minimal setup, you get:
+
+- Full infinite canvas with pan and zoom
+- Complete drawing tools (select, draw, shapes, text, etc.)
+- Default UI with toolbar and menus
+- Undo/redo functionality
+- Multi-selection and grouping
+- Export capabilities
+
+## Required imports
+
+<CodeGroup>
+
+```tsx Component import
+import { Tldraw } from 'tldraw'
+```
+
+```css Styles import
+import 'tldraw/tldraw.css'
+```
+
+</CodeGroup>
+
+<Note>
+The `tldraw/tldraw.css` import is required for the editor to display correctly. Without it, the editor won't render properly.
+</Note>
+
+## Container styling
+
+The editor should be placed inside a container with defined dimensions. The `tldraw__editor` class provides sensible defaults:
+
+```tsx
+<div className="tldraw__editor">
+  <Tldraw />
+</div>
+```
+
+Alternatively, you can use custom styles:
+
+```tsx
+<div style={{ position: 'fixed', inset: 0 }}>
+  <Tldraw />
+</div>
+```
+
+## onMount callback
+
+You can access the editor instance using the `onMount` prop:
+
+```tsx
+export default function BasicExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw
+        onMount={(editor) => {
+          // Access editor instance
+          editor.selectAll()
+        }}
+      />
+    </div>
+  )
+}
+```
+
+## Next steps
+
+- Learn about [controlled editor](/examples/controlled-editor)
+- Explore [custom shapes](/examples/custom-shape)
+- Add [persistence](/examples/persistence)

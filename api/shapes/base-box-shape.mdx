@@ -1,0 +1,163 @@
+---
+title: BaseBoxShapeUtil
+description: Base class for rectangular shapes with width and height properties
+---
+
+The `BaseBoxShapeUtil` class extends `ShapeUtil` to provide common functionality for rectangular shapes that have `w` (width) and `h` (height) properties.
+
+## Overview
+
+Many shapes in tldraw are fundamentally rectangular: images, videos, frames, and geometric shapes with text. `BaseBoxShapeUtil` provides default implementations for geometry, resizing, and interpolation that work for these box-based shapes.
+
+## Type signature
+
+```typescript
+abstract class BaseBoxShapeUtil<Shape extends TLBaseBoxShape> extends ShapeUtil<Shape>
+```
+
+<ParamField path="Shape" type="TLBaseBoxShape">
+  A shape type that has `w` and `h` properties:
+  
+  ```typescript
+  type TLBaseBoxShape = ExtractShapeByProps<{ w: number; h: number }>
+  ```
+</ParamField>
+
+## Provided implementations
+
+### getGeometry()
+
+Returns a filled rectangle geometry based on the shape's width and height.
+
+```typescript
+getGeometry(shape: Shape): Geometry2d
+```
+
+**Implementation:**
+```typescript
+return new Rectangle2d({
+  width: shape.props.w,
+  height: shape.props.h,
+  isFilled: true,
+})
+```
+
+You can override this for custom geometry. For example, `GeoShapeUtil` overrides it to provide different geometries based on the geo type (ellipse, triangle, etc.).
+
+### onResize()
+
+Handles shape resizing using the standard box resize behavior.
+
+```typescript
+onResize(shape: Shape, info: TLResizeInfo<Shape>)
+```
+
+This uses the `resizeBox` helper which:
+- Updates width and height based on the resize scale
+- Maintains aspect ratio if locked
+- Handles negative scales (flipping)
+- Updates position based on the resize handle
+
+### getHandleSnapGeometry()
+
+Provides snap points at the corners and center of the shape.
+
+```typescript
+getHandleSnapGeometry(shape: Shape): HandleSnapGeometry
+```
+
+**Returns:**
+```typescript
+{
+  points: this.getGeometry(shape).bounds.cornersAndCenter
+}
+```
+
+### getInterpolatedProps()
+
+Interpolates width and height for smooth animations.
+
+```typescript
+getInterpolatedProps(startShape: Shape, endShape: Shape, t: number): Shape['props']
+```
+
+**Returns:**
+```typescript
+{
+  ...endShape.props,
+  w: lerp(startShape.props.w, endShape.props.w, t),
+  h: lerp(startShape.props.h, endShape.props.h, t),
+}
+```
+
+## Example: Custom box shape
+
+```typescript
+import { BaseBoxShapeUtil, HTMLContainer, TLBaseShape } from 'tldraw'
+
+type CardShape = TLBaseShape<'card', {
+  w: number
+  h: number
+  title: string
+  description: string
+}>
+
+class CardShapeUtil extends BaseBoxShapeUtil<CardShape> {
+  static override type = 'card' as const
+  
+  getDefaultProps(): CardShape['props'] {
+    return {
+      w: 200,
+      h: 150,
+      title: 'New Card',
+      description: '',
+    }
+  }
+  
+  component(shape: CardShape) {
+    return (
+      <HTMLContainer>
+        <div style={{
+          width: shape.props.w,
+          height: shape.props.h,
+          padding: 16,
+          backgroundColor: 'white',
+          border: '1px solid #ddd',
+          borderRadius: 8,
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <h3 style={{ margin: 0, marginBottom: 8 }}>{shape.props.title}</h3>
+          <p style={{ margin: 0, fontSize: 14, color: '#666' }}>
+            {shape.props.description}
+          </p>
+        </div>
+      </HTMLContainer>
+    )
+  }
+  
+  indicator(shape: CardShape) {
+    return <rect width={shape.props.w} height={shape.props.h} rx={8} />
+  }
+}
+```
+
+## When to use BaseBoxShapeUtil
+
+Use `BaseBoxShapeUtil` when:
+- Your shape is fundamentally rectangular
+- You want standard box resize behavior
+- Your shape has `w` and `h` properties
+- You want default snap points at corners and center
+
+Extend `ShapeUtil` directly when:
+- Your shape isn't rectangular (like arrows or freehand)
+- You need custom resize behavior
+- Your shape uses different dimension properties
+
+## Built-in shapes using BaseBoxShapeUtil
+
+- `GeoShapeUtil` - Geometric shapes (rectangle, ellipse, triangle, etc.)
+- `ImageShapeUtil` - Image shapes
+- `VideoShapeUtil` - Video shapes  
+- `FrameShapeUtil` - Frame containers

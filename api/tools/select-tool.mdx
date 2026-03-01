@@ -1,0 +1,176 @@
+---
+title: SelectTool
+description: The default selection and manipulation tool in tldraw
+---
+
+# SelectTool
+
+The `SelectTool` is the primary tool for selecting, moving, resizing, and manipulating shapes in tldraw. It extends `StateNode` and manages multiple child states to handle different interaction modes.
+
+## Overview
+
+The SelectTool is a complex state machine that handles:
+- Selecting shapes by clicking or brushing
+- Translating (moving) selected shapes
+- Resizing shapes via handles
+- Rotating shapes
+- Cropping images
+- Editing shape content (text, labels, etc.)
+- Drawing selection brushes
+
+## Static Properties
+
+<ParamField path="id" type="string" default="'select'">
+  The tool identifier
+</ParamField>
+
+<ParamField path="initial" type="string" default="'idle'">
+  Initial child state when the tool is activated
+</ParamField>
+
+<ParamField path="isLockable" type="boolean" default="false">
+  The select tool cannot be locked
+</ParamField>
+
+## Child States
+
+The SelectTool manages the following child states:
+
+- **Idle** - Default state, waiting for user input
+- **PointingCanvas** - User clicked on empty canvas
+- **PointingShape** - User clicked on a shape
+- **PointingSelection** - User clicked on the selection box
+- **Brushing** - User is drawing a selection rectangle
+- **ScribbleBrushing** - User is drawing a scribble selection
+- **Translating** - User is moving selected shapes
+- **Resizing** - User is resizing a shape via handle
+- **Rotating** - User is rotating shapes
+- **PointingResizeHandle** - User clicked on a resize handle
+- **PointingRotateHandle** - User clicked on the rotation handle
+- **EditingShape** - User is editing shape content
+- **Crop** - User is cropping an image
+- **Cropping** - User is actively adjusting crop bounds
+- **PointingCropHandle** - User clicked on a crop handle
+- **PointingArrowLabel** - User clicked on an arrow label
+- **PointingHandle** - User clicked on a shape handle (like arrow endpoints)
+- **DraggingHandle** - User is dragging a shape handle
+
+## Methods
+
+### cleanUpDuplicateProps()
+
+Cleans up duplicate properties when the selection changes.
+
+```typescript
+cleanUpDuplicateProps(): void
+```
+
+This internal method ensures that duplicate properties stored in the instance state are cleared when the selection changes.
+
+## Lifecycle Methods
+
+### onEnter()
+
+Called when the select tool is activated.
+
+```typescript
+onEnter(): void
+```
+
+Sets up a reactor to clean up duplicate properties when the selection changes.
+
+### onExit()
+
+Called when exiting the select tool.
+
+```typescript
+onExit(): void
+```
+
+Cleans up the reactor and exits any active shape editing mode.
+
+## Usage Example
+
+```typescript
+import { SelectTool } from '@tldraw/tldraw'
+
+// The SelectTool is included by default in tldraw
+// You typically interact with it through the editor:
+
+// Activate the select tool
+editor.setCurrentTool('select')
+
+// Check if select tool is active
+const isSelectActive = editor.getCurrentToolId() === 'select'
+
+// Select shapes programmatically
+editor.setSelectedShapes([shapeId1, shapeId2])
+
+// Get current selection
+const selectedShapes = editor.getSelectedShapes()
+```
+
+## Extending SelectTool
+
+You can extend the SelectTool to customize its behavior:
+
+```typescript
+import { SelectTool, TLStateNodeConstructor } from '@tldraw/tldraw'
+
+class MyCustomSelectTool extends SelectTool {
+  override onEnter() {
+    super.onEnter()
+    console.log('Custom select tool activated')
+  }
+  
+  // Add custom child states
+  static override children(): TLStateNodeConstructor[] {
+    return [
+      ...super.children(),
+      MyCustomState
+    ]
+  }
+}
+```
+
+## Common Patterns
+
+### Detecting Selection Changes
+
+```typescript
+import { react } from '@tldraw/state'
+
+// React to selection changes
+const dispose = react('selection changed', () => {
+  const selectedIds = editor.getSelectedShapeIds()
+  console.log('Selection:', selectedIds)
+})
+
+// Clean up when done
+dispose()
+```
+
+### Programmatic Translation
+
+```typescript
+// Move selected shapes
+editor.nudgeShapes(editor.getSelectedShapeIds(), { x: 10, y: 0 })
+
+// Or use translate
+editor.translateShapes(editor.getSelectedShapeIds(), { x: 100, y: 50 })
+```
+
+### Resizing Shapes
+
+```typescript
+// Resize shapes programmatically
+editor.resizeShapes([
+  { id: shapeId, type: 'scale', scaleX: 2, scaleY: 2 }
+])
+```
+
+## See Also
+
+- [StateNode](/api/tools/state-node) - Base class for all tools
+- [HandTool](/api/tools/hand-tool) - Panning tool
+- [Editor](/api/editor) - Main editor instance for programmatic control

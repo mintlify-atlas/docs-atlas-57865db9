@@ -1,0 +1,652 @@
+---
+title: Embedding tldraw
+description: How to embed the tldraw canvas in your application and customize the integration
+---
+
+Embedding tldraw in your application is straightforward and highly customizable. This guide covers everything from basic integration to advanced embedding patterns.
+
+## Basic embedding
+
+### React applications
+
+The simplest way to embed tldraw in a React application:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <Tldraw />
+    </div>
+  )
+}
+```
+
+<Tip>
+The tldraw component requires a parent with defined dimensions. Use `position: fixed` with `inset: 0` or set explicit width/height values.
+</Tip>
+
+### With custom container
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function EmbeddedCanvas() {
+  return (
+    <div className="canvas-container">
+      <Tldraw />
+    </div>
+  )
+}
+```
+
+```css
+.canvas-container {
+  width: 100%;
+  height: 600px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+```
+
+## Editor instance access
+
+Access the editor instance for programmatic control:
+
+```tsx
+import { Editor, Tldraw } from 'tldraw'
+import { useEffect, useState } from 'react'
+
+export default function App() {
+  const [editor, setEditor] = useState<Editor | null>(null)
+  
+  useEffect(() => {
+    if (!editor) return
+    
+    // Editor is ready, perform initial setup
+    editor.createShape({
+      type: 'geo',
+      x: 100,
+      y: 100,
+      props: { w: 200, h: 150 },
+    })
+  }, [editor])
+  
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        setEditor(editor)
+      }}
+    />
+  )
+}
+```
+
+### Using hooks
+
+Access the editor in child components:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+
+function CustomButton() {
+  const editor = useEditor()
+  
+  return (
+    <button onClick={() => {
+      editor.selectAll()
+    }}>
+      Select All
+    </button>
+  )
+}
+
+export default function App() {
+  return (
+    <Tldraw>
+      <CustomButton />
+    </Tldraw>
+  )
+}
+```
+
+## Headless editor
+
+Use the `Editor` class directly for headless (no UI) integration:
+
+```typescript
+import { Editor, createTLStore } from '@tldraw/editor'
+
+const store = createTLStore({
+  shapeUtils: [],
+  bindingUtils: [],
+})
+
+const editor = new Editor({
+  store,
+  shapeUtils: [],
+  bindingUtils: [],
+  tools: [],
+  getContainer: () => document.body,
+})
+
+// Use editor programmatically
+editor.createShape({
+  type: 'geo',
+  x: 0,
+  y: 0,
+  props: { w: 100, h: 100, geo: 'rectangle' },
+})
+
+const snapshot = editor.getSnapshot()
+console.log(snapshot)
+```
+
+<Accordion title="Use cases for headless editor">
+Headless editors are useful for:
+
+- Server-side rendering and exports
+- Automated testing
+- Canvas manipulation without UI
+- Background processing
+- API integrations
+- Command-line tools
+</Accordion>
+
+## Customizing the UI
+
+### Hide default UI
+
+Embed just the canvas without toolbar and menus:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function MinimalCanvas() {
+  return (
+    <Tldraw
+      hideUi
+      components={{
+        Toolbar: null,
+        HelpMenu: null,
+        MainMenu: null,
+        QuickActions: null,
+        PageMenu: null,
+      }}
+    />
+  )
+}
+```
+
+### Custom toolbar
+
+```tsx
+import { Tldraw, TldrawUiMenuItem, useTools } from 'tldraw'
+
+function CustomToolbar() {
+  const tools = useTools()
+  
+  return (
+    <div className="custom-toolbar">
+      <TldrawUiMenuItem
+        {...tools['select']}
+        isSelected={tools['select'].isSelected}
+      />
+      <TldrawUiMenuItem
+        {...tools['draw']}
+        isSelected={tools['draw'].isSelected}
+      />
+      <TldrawUiMenuItem
+        {...tools['eraser']}
+        isSelected={tools['eraser'].isSelected}
+      />
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Tldraw
+      components={{
+        Toolbar: CustomToolbar,
+      }}
+    />
+  )
+}
+```
+
+### Custom theme
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+import './custom-theme.css'
+
+export default function ThemedCanvas() {
+  return (
+    <div className="tldraw-custom-theme">
+      <Tldraw />
+    </div>
+  )
+}
+```
+
+```css
+/* custom-theme.css */
+.tldraw-custom-theme {
+  --color-background: #1e1e1e;
+  --color-muted: #2d2d2d;
+  --color-text: #ffffff;
+  --color-primary: #3b82f6;
+}
+
+.tldraw-custom-theme .tl-toolbar {
+  background: var(--color-muted);
+  border-radius: 12px;
+}
+```
+
+## Responsive embedding
+
+### Mobile-optimized
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useEffect, useState } from 'react'
+
+export default function ResponsiveCanvas() {
+  const [isMobile, setIsMobile] = useState(false)
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+  
+  return (
+    <Tldraw
+      forceMobile={isMobile}
+      components={{
+        // Simplify UI for mobile
+        HelpMenu: isMobile ? null : undefined,
+        PageMenu: isMobile ? null : undefined,
+      }}
+    />
+  )
+}
+```
+
+### Adaptive layout
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useState, useEffect } from 'react'
+
+function useContainerSize(ref: React.RefObject<HTMLDivElement>) {
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  
+  useEffect(() => {
+    if (!ref.current) return
+    
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect
+      setSize({ width, height })
+    })
+    
+    observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [ref])
+  
+  return size
+}
+
+export default function AdaptiveCanvas() {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const { width } = useContainerSize(containerRef)
+  
+  return (
+    <div ref={containerRef} style={{ width: '100%', height: '600px' }}>
+      <Tldraw
+        components={{
+          // Hide UI elements when container is narrow
+          Toolbar: width < 400 ? null : undefined,
+        }}
+      />
+    </div>
+  )
+}
+```
+
+## Persistence
+
+### LocalStorage persistence
+
+```tsx
+import { Tldraw } from 'tldraw'
+
+const PERSISTENCE_KEY = 'my-tldraw-canvas'
+
+export default function PersistentCanvas() {
+  return (
+    <Tldraw
+      persistenceKey={PERSISTENCE_KEY}
+    />
+  )
+}
+```
+
+### Custom persistence
+
+```tsx
+import { Tldraw, Editor, TLStoreSnapshot } from 'tldraw'
+import { useEffect, useState } from 'react'
+
+export default function CustomPersistence() {
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [snapshot, setSnapshot] = useState<TLStoreSnapshot | null>(null)
+  
+  // Load from API
+  useEffect(() => {
+    async function load() {
+      const response = await fetch('/api/canvas/123')
+      const data = await response.json()
+      setSnapshot(data.snapshot)
+    }
+    load()
+  }, [])
+  
+  // Save to API
+  useEffect(() => {
+    if (!editor) return
+    
+    const handleSave = async () => {
+      const snapshot = editor.getSnapshot()
+      await fetch('/api/canvas/123', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot }),
+      })
+    }
+    
+    // Auto-save on changes
+    const dispose = editor.store.listen(handleSave)
+    return dispose
+  }, [editor])
+  
+  return (
+    <Tldraw
+      onMount={setEditor}
+      snapshot={snapshot}
+    />
+  )
+}
+```
+
+### Database integration
+
+```tsx
+import { Tldraw, Editor } from 'tldraw'
+import { useEffect, useState } from 'react'
+import { supabase } from './supabase'
+
+export default function DatabaseCanvas({ canvasId }: { canvasId: string }) {
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [snapshot, setSnapshot] = useState(null)
+  
+  // Load from database
+  useEffect(() => {
+    async function loadCanvas() {
+      const { data } = await supabase
+        .from('canvases')
+        .select('snapshot')
+        .eq('id', canvasId)
+        .single()
+      
+      if (data?.snapshot) {
+        setSnapshot(data.snapshot)
+      }
+    }
+    loadCanvas()
+  }, [canvasId])
+  
+  // Auto-save to database
+  useEffect(() => {
+    if (!editor) return
+    
+    let timeoutId: NodeJS.Timeout
+    
+    const handleChange = () => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(async () => {
+        const snapshot = editor.getSnapshot()
+        
+        await supabase
+          .from('canvases')
+          .upsert({
+            id: canvasId,
+            snapshot,
+            updated_at: new Date().toISOString(),
+          })
+      }, 1000) // Debounce saves by 1 second
+    }
+    
+    const dispose = editor.store.listen(handleChange)
+    return () => {
+      dispose()
+      clearTimeout(timeoutId)
+    }
+  }, [editor, canvasId])
+  
+  return <Tldraw onMount={setEditor} snapshot={snapshot} />
+}
+```
+
+## Constraints and permissions
+
+### Read-only mode
+
+```tsx
+import { Tldraw, Editor } from 'tldraw'
+import { useEffect } from 'react'
+
+export default function ReadOnlyCanvas({ snapshot }) {
+  const handleMount = (editor: Editor) => {
+    // Disable all editing
+    editor.updateInstanceState({ isReadonly: true })
+  }
+  
+  return (
+    <Tldraw
+      onMount={handleMount}
+      snapshot={snapshot}
+      components={{
+        Toolbar: null,
+        MainMenu: null,
+      }}
+    />
+  )
+}
+```
+
+### Limited editing
+
+```tsx
+import { Tldraw, Editor } from 'tldraw'
+
+export default function LimitedCanvas() {
+  const handleMount = (editor: Editor) => {
+    // Only allow moving and selecting
+    editor.setCurrentTool('select')
+    
+    // Prevent shape creation
+    const originalCreate = editor.createShape.bind(editor)
+    editor.createShape = (...args) => {
+      console.warn('Shape creation disabled')
+      return null
+    }
+  }
+  
+  return <Tldraw onMount={handleMount} />
+}
+```
+
+## Multi-canvas embedding
+
+### Multiple canvases
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function MultiCanvas() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      <div style={{ height: '400px' }}>
+        <Tldraw persistenceKey="canvas-1" />
+      </div>
+      <div style={{ height: '400px' }}>
+        <Tldraw persistenceKey="canvas-2" />
+      </div>
+    </div>
+  )
+}
+```
+
+### Synchronized canvases
+
+```tsx
+import { Tldraw, Editor, TLStoreSnapshot } from 'tldraw'
+import { useState } from 'react'
+
+export default function SyncedCanvases() {
+  const [snapshot, setSnapshot] = useState<TLStoreSnapshot | null>(null)
+  
+  const handleChange = (editor: Editor) => {
+    const newSnapshot = editor.getSnapshot()
+    setSnapshot(newSnapshot)
+  }
+  
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      <div style={{ height: '400px' }}>
+        <Tldraw
+          onMount={(editor) => {
+            editor.store.listen(() => handleChange(editor))
+          }}
+        />
+      </div>
+      <div style={{ height: '400px' }}>
+        <Tldraw
+          snapshot={snapshot}
+          onMount={(editor) => {
+            editor.updateInstanceState({ isReadonly: true })
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+```
+
+## iframe embedding
+
+### Embed in iframe
+
+```html
+<!-- parent.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>tldraw Embedded</title>
+</head>
+<body>
+  <iframe
+    src="/tldraw-canvas.html"
+    width="100%"
+    height="600"
+    frameborder="0"
+    allow="clipboard-read; clipboard-write"
+  ></iframe>
+</body>
+</html>
+```
+
+```html
+<!-- tldraw-canvas.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="/tldraw.css" />
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #root { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/main.tsx"></script>
+</body>
+</html>
+```
+
+### Cross-origin communication
+
+```tsx
+// In iframe
+import { Tldraw, Editor } from 'tldraw'
+import { useEffect, useState } from 'react'
+
+export default function IframeCanvas() {
+  const [editor, setEditor] = useState<Editor | null>(null)
+  
+  useEffect(() => {
+    if (!editor) return
+    
+    // Listen for messages from parent
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'CREATE_SHAPE') {
+        editor.createShape(event.data.shape)
+      }
+    })
+    
+    // Send changes to parent
+    const dispose = editor.store.listen(() => {
+      window.parent.postMessage({
+        type: 'CANVAS_UPDATED',
+        snapshot: editor.getSnapshot(),
+      }, '*')
+    })
+    
+    return dispose
+  }, [editor])
+  
+  return <Tldraw onMount={setEditor} />
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Editor API" icon="code" href="/editor/overview">
+    Learn about the Editor API
+  </Card>
+  <Card title="UI customization" icon="paintbrush" href="/ui/customization">
+    Customize the tldraw UI
+  </Card>
+  <Card title="Persistence" icon="floppy-disk" href="/storage/persistence">
+    Advanced persistence patterns
+  </Card>
+  <Card title="Multiplayer" icon="users" href="/multiplayer/overview">
+    Add real-time collaboration
+  </Card>
+</CardGroup>

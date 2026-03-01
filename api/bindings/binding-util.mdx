@@ -1,0 +1,322 @@
+---
+title: BindingUtil
+description: Base class for creating custom binding types in tldraw. Bindings create relationships between shapes and define how they interact when created, changed, or deleted.
+---
+
+`BindingUtil` is an abstract base class for creating custom binding types in tldraw. Bindings represent relationships between shapes (like an arrow pointing to a shape) and define how those relationships behave throughout their lifecycle.
+
+## Constructor
+
+```typescript
+constructor(editor: Editor)
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance that this binding util is associated with.
+</ParamField>
+
+## Static properties
+
+<ParamField path="type" type="string" required>
+  The type identifier for this binding util. Must match the binding's type.
+</ParamField>
+
+<ParamField path="props" type="RecordProps<TLUnknownBinding>">
+  Validations for this binding's props.
+</ParamField>
+
+<ParamField path="migrations" type="TLPropsMigrations">
+  Migrations for this binding's props, used when upgrading binding data between schema versions.
+</ParamField>
+
+## Instance properties
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance passed to the constructor.
+</ParamField>
+
+## Abstract methods
+
+### getDefaultProps()
+
+```typescript
+abstract getDefaultProps(): Partial<Binding['props']>
+```
+
+Returns the default props for a binding of this type.
+
+**Returns:** `Partial<Binding['props']>` - Default properties for the binding.
+
+## Lifecycle methods
+
+### onBeforeCreate()
+
+```typescript
+onBeforeCreate?(options: BindingOnCreateOptions<Binding>): Binding | void
+```
+
+Called when a binding is about to be created. Optionally return a new binding to replace the one being created (e.g., to set different initial props).
+
+<ParamField path="options" type="BindingOnCreateOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding being created.
+  </ParamField>
+</ParamField>
+
+**Returns:** `Binding | void` - Optionally return a modified binding.
+
+### onAfterCreate()
+
+```typescript
+onAfterCreate?(options: BindingOnCreateOptions<Binding>): void
+```
+
+Called after a binding has been created.
+
+<ParamField path="options" type="BindingOnCreateOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding that was created.
+  </ParamField>
+</ParamField>
+
+### onBeforeChange()
+
+```typescript
+onBeforeChange?(options: BindingOnChangeOptions<Binding>): Binding | void
+```
+
+Called when a binding is about to be changed. Note that this only fires when the binding record itself is changing, not when the associated shapes change (use `onAfterChangeFromShape` and `onAfterChangeToShape` for that).
+
+Optionally return a new binding to replace the one being changed (e.g., to enforce constraints on the binding's props).
+
+<ParamField path="options" type="BindingOnChangeOptions<Binding>" required>
+  <ParamField path="bindingBefore" type="Binding">
+    The binding record before the change.
+  </ParamField>
+  <ParamField path="bindingAfter" type="Binding">
+    The binding record after the change.
+  </ParamField>
+</ParamField>
+
+**Returns:** `Binding | void` - Optionally return a modified binding.
+
+### onAfterChange()
+
+```typescript
+onAfterChange?(options: BindingOnChangeOptions<Binding>): void
+```
+
+Called after a binding has been changed. Note that this only fires when the binding record itself is changing, not when the associated shapes change.
+
+<ParamField path="options" type="BindingOnChangeOptions<Binding>" required>
+  <ParamField path="bindingBefore" type="Binding">
+    The binding record before the change.
+  </ParamField>
+  <ParamField path="bindingAfter" type="Binding">
+    The binding record after the change.
+  </ParamField>
+</ParamField>
+
+### onBeforeDelete()
+
+```typescript
+onBeforeDelete?(options: BindingOnDeleteOptions<Binding>): void
+```
+
+Called when a binding is about to be deleted.
+
+<ParamField path="options" type="BindingOnDeleteOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding being deleted.
+  </ParamField>
+</ParamField>
+
+### onAfterDelete()
+
+```typescript
+onAfterDelete?(options: BindingOnDeleteOptions<Binding>): void
+```
+
+Called after a binding has been deleted.
+
+<ParamField path="options" type="BindingOnDeleteOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding that was deleted.
+  </ParamField>
+</ParamField>
+
+## Shape change methods
+
+### onAfterChangeFromShape()
+
+```typescript
+onAfterChangeFromShape?(options: BindingOnShapeChangeOptions<Binding>): void
+```
+
+Called after the shape referenced in a binding's `fromId` is changed. Use this to propagate changes to the binding itself or the other shape as needed.
+
+<ParamField path="options" type="BindingOnShapeChangeOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding record linking these two shapes.
+  </ParamField>
+  <ParamField path="shapeBefore" type="TLShape">
+    The shape record before the change.
+  </ParamField>
+  <ParamField path="shapeAfter" type="TLShape">
+    The shape record after the change.
+  </ParamField>
+  <ParamField path="reason" type="'self' | 'ancestry'">
+    Why did this shape change? `'self'` means the shape itself changed, `'ancestry'` means the shape's ancestry changed but the shape itself may not have.
+  </ParamField>
+</ParamField>
+
+### onAfterChangeToShape()
+
+```typescript
+onAfterChangeToShape?(options: BindingOnShapeChangeOptions<Binding>): void
+```
+
+Called after the shape referenced in a binding's `toId` is changed. Use this to propagate changes to the binding itself or the other shape as needed.
+
+<ParamField path="options" type="BindingOnShapeChangeOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding record linking these two shapes.
+  </ParamField>
+  <ParamField path="shapeBefore" type="TLShape">
+    The shape record before the change.
+  </ParamField>
+  <ParamField path="shapeAfter" type="TLShape">
+    The shape record after the change.
+  </ParamField>
+  <ParamField path="reason" type="'self' | 'ancestry'">
+    Why did this shape change? `'self'` means the shape itself changed, `'ancestry'` means the shape's ancestry changed but the shape itself may not have.
+  </ParamField>
+</ParamField>
+
+## Shape deletion methods
+
+### onBeforeDeleteFromShape()
+
+```typescript
+onBeforeDeleteFromShape?(options: BindingOnShapeDeleteOptions<Binding>): void
+```
+
+Called before the shape referenced in a binding's `fromId` is about to be deleted. Use with care - you may want to use `onBeforeIsolateFromShape` instead.
+
+<ParamField path="options" type="BindingOnShapeDeleteOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding record that refers to the shape.
+  </ParamField>
+  <ParamField path="shape" type="TLShape">
+    The shape that is about to be deleted.
+  </ParamField>
+</ParamField>
+
+### onBeforeDeleteToShape()
+
+```typescript
+onBeforeDeleteToShape?(options: BindingOnShapeDeleteOptions<Binding>): void
+```
+
+Called before the shape referenced in a binding's `toId` is about to be deleted. Use with care - you may want to use `onBeforeIsolateToShape` instead.
+
+<ParamField path="options" type="BindingOnShapeDeleteOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding record that refers to the shape.
+  </ParamField>
+  <ParamField path="shape" type="TLShape">
+    The shape that is about to be deleted.
+  </ParamField>
+</ParamField>
+
+## Shape isolation methods
+
+### onBeforeIsolateFromShape()
+
+```typescript
+onBeforeIsolateFromShape?(options: BindingOnShapeIsolateOptions<Binding>): void
+```
+
+Called before the shape referenced in a binding's `fromId` is about to be isolated from the shape referenced in `toId`.
+
+Isolation happens whenever two bound shapes are separated:
+- One is deleted, but the other is not
+- One is copied, but the other is not
+- One is duplicated, but the other is not
+
+If the remaining shape depends on the binding for its rendering, it may now be in an inconsistent state. For example, an arrow shape depends on the binding to know where the end of the arrow is. If the binding is removed, the arrow would suddenly point to the wrong location. Use isolation callbacks to update the shape based on the binding that's about to be removed.
+
+<ParamField path="options" type="BindingOnShapeIsolateOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding record that refers to the shape.
+  </ParamField>
+  <ParamField path="removedShape" type="TLShape">
+    The shape being removed. For deletion, this is the deleted shape. For copy/duplicate, this is the shape that isn't being copied/duplicated and is getting left behind.
+  </ParamField>
+</ParamField>
+
+### onBeforeIsolateToShape()
+
+```typescript
+onBeforeIsolateToShape?(options: BindingOnShapeIsolateOptions<Binding>): void
+```
+
+Called before the shape referenced in a binding's `toId` is about to be isolated from the shape referenced in `fromId`. See `onBeforeIsolateFromShape` for details about isolation.
+
+<ParamField path="options" type="BindingOnShapeIsolateOptions<Binding>" required>
+  <ParamField path="binding" type="Binding">
+    The binding record that refers to the shape.
+  </ParamField>
+  <ParamField path="removedShape" type="TLShape">
+    The shape being removed. For deletion, this is the deleted shape. For copy/duplicate, this is the shape that isn't being copied/duplicated and is getting left behind.
+  </ParamField>
+</ParamField>
+
+## Other methods
+
+### onOperationComplete()
+
+```typescript
+onOperationComplete?(): void
+```
+
+Called whenever a store operation involving this binding type has completed. This is useful for working with networks of related bindings that may need to update together.
+
+## Example
+
+```typescript
+import { BindingUtil, TLBinding } from '@tldraw/editor'
+
+// Define a custom binding type
+interface StickerBinding extends TLBinding {
+  type: 'sticker'
+  props: {
+    position: { x: number; y: number }
+  }
+}
+
+// Create a binding util for the sticker binding
+class StickerBindingUtil extends BindingUtil<StickerBinding> {
+  static override type = 'sticker'
+  
+  override getDefaultProps() {
+    return {
+      position: { x: 0.5, y: 0.5 }
+    }
+  }
+  
+  override onAfterChangeToShape({ binding, shapeAfter }) {
+    // Update the sticker position when the bound shape moves
+    const sticker = this.editor.getShape(binding.fromId)
+    if (!sticker) return
+    
+    // Custom logic to reposition the sticker
+    // ...
+  }
+  
+  override onBeforeDeleteToShape({ binding }) {
+    // Remove the sticker when the bound shape is deleted
+    this.editor.deleteShapes([binding.fromId])
+  }
+}
+```

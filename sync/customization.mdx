@@ -1,0 +1,470 @@
+---
+title: Customizing multiplayer
+description: Customize presence data, sync behavior, and messaging
+---
+
+# Customizing multiplayer
+
+Learn how to customize the multiplayer experience including presence data, sync behavior, and custom messaging.
+
+## Custom presence data
+
+By default, tldraw shares cursor position and selection state. You can customize what presence data is shared.
+
+### Basic presence customization
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import { TLStore, TLPresenceUserInfo, TLPresenceStateInfo } from 'tldraw'
+
+function MyApp() {
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    userInfo: {
+      id: 'user-123',
+      name: 'Alice',
+      color: '#ff0000'
+    },
+    getUserPresence: (store: TLStore, user: TLPresenceUserInfo) => {
+      // Get current instance state
+      const instance = store.get('instance:instance')
+      if (!instance) return null
+      
+      return {
+        userId: user.id,
+        userName: user.name,
+        cursor: instance.cursor,
+        selectedShapeIds: instance.selectedShapeIds,
+        // Add custom fields
+        currentTool: instance.currentToolId,
+        viewportBounds: instance.viewportBounds
+      }
+    }
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+### Advanced presence example
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import { computed } from '@tldraw/state'
+
+function CollaborativeApp() {
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    userInfo: {
+      id: 'user-123',
+      name: 'Alice',
+      color: '#ff0000',
+      avatar: 'https://example.com/avatar.jpg'
+    },
+    getUserPresence: (store, user) => {
+      const instance = store.get('instance:instance')
+      if (!instance) return null
+      
+      // Get current page
+      const currentPageId = instance.currentPageId
+      const page = store.get(currentPageId)
+      
+      return {
+        userId: user.id,
+        userName: user.name,
+        userColor: user.color,
+        cursor: instance.cursor,
+        selectedShapeIds: instance.selectedShapeIds,
+        // Custom fields
+        currentPage: page?.name ?? 'Untitled',
+        currentTool: instance.currentToolId,
+        isIdle: instance.isIdle,
+        lastActivity: Date.now()
+      }
+    }
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+## Reactive presence
+
+Use signals for dynamic presence updates:
+
+```tsx
+import { atom } from '@tldraw/state'
+import { useSync } from '@tldraw/sync'
+
+function MyApp() {
+  // Create reactive user state
+  const currentUser = atom('user', {
+    id: 'user-123',
+    name: 'Alice',
+    color: '#ff0000',
+    status: 'active' as 'active' | 'away' | 'busy'
+  })
+  
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    // Pass reactive signal
+    userInfo: currentUser,
+    getUserPresence: (store, user) => {
+      const instance = store.get('instance:instance')
+      if (!instance) return null
+      
+      return {
+        userId: user.id,
+        userName: user.name,
+        cursor: instance.cursor,
+        selectedShapeIds: instance.selectedShapeIds,
+        // Access reactive status
+        status: user.status
+      }
+    }
+  })
+  
+  // Update status dynamically
+  const handleStatusChange = (status: 'active' | 'away' | 'busy') => {
+    currentUser.update((user) => ({ ...user, status }))
+  }
+  
+  return (
+    <div>
+      <Tldraw store={store.store} />
+      <StatusSelector onChange={handleStatusChange} />
+    </div>
+  )
+}
+```
+
+## Hiding presence
+
+Temporarily hide your presence from others:
+
+```tsx
+const store = useSync({
+  uri: 'wss://sync.example.com/room',
+  assets: myAssetStore,
+  getUserPresence: (store, user) => {
+    // Return null to hide presence
+    if (user.invisible) return null
+    
+    const instance = store.get('instance:instance')
+    if (!instance) return null
+    
+    return {
+      userId: user.id,
+      userName: user.name,
+      cursor: instance.cursor,
+      selectedShapeIds: instance.selectedShapeIds
+    }
+  }
+})
+```
+
+## Custom messages
+
+Send custom messages between clients:
+
+### Client-side sending
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import { useEffect, useRef } from 'react'
+
+function ChatApp() {
+  const syncClientRef = useRef<any>(null)
+  
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    onCustomMessageReceived: (data) => {
+      if (data.type === 'chat') {
+        console.log(`${data.userName}: ${data.message}`)
+        // Handle chat message
+      }
+      if (data.type === 'reaction') {
+        console.log(`${data.userName} reacted with ${data.emoji}`)
+        // Show reaction animation
+      }
+    }
+  })
+  
+  // Access sync client to send messages
+  useEffect(() => {
+    if (store.status === 'synced-remote') {
+      // Store reference to internal client for sending messages
+      // Note: This is accessing internals and may change
+    }
+  }, [store])
+  
+  const sendChatMessage = (message: string) => {
+    // Custom messages are sent through the sync client
+    // You would need to access the internal TLSyncClient instance
+  }
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+### Server-side broadcasting
+
+```ts
+import { TLSocketRoom } from '@tldraw/sync-core'
+
+const room = new TLSocketRoom({
+  schema: createTLSchema(),
+  storage: myStorage
+})
+
+// Send custom message to specific session
+room.sendCustomMessage('session-123', {
+  type: 'notification',
+  title: 'Document saved',
+  message: 'Your changes have been saved'
+})
+
+// Broadcast to all sessions (implement helper)
+function broadcastCustomMessage(room: TLSocketRoom, data: any) {
+  for (const [sessionId] of room.sessions) {
+    room.sendCustomMessage(sessionId, data)
+  }
+}
+
+broadcastCustomMessage(room, {
+  type: 'announcement',
+  message: 'Server will restart in 5 minutes'
+})
+```
+
+## Custom storage
+
+Implement custom storage backends:
+
+```ts
+import { 
+  TLSyncStorage, 
+  TLSyncStorageTransaction 
+} from '@tldraw/sync-core'
+import { TLRecord } from '@tldraw/tlschema'
+
+class RedisStorage implements TLSyncStorage<TLRecord> {
+  private redis: RedisClient
+  private roomId: string
+  
+  constructor(redis: RedisClient, roomId: string) {
+    this.redis = redis
+    this.roomId = roomId
+  }
+  
+  async transaction<T>(
+    fn: (txn: TLSyncStorageTransaction<TLRecord>) => T
+  ) {
+    // Implement transaction logic
+    const clock = await this.redis.get(`room:${this.roomId}:clock`)
+    const documentClock = await this.redis.get(
+      `room:${this.roomId}:documentClock`
+    )
+    
+    const txn: TLSyncStorageTransaction<TLRecord> = {
+      get: async (id: string) => {
+        const data = await this.redis.get(`room:${this.roomId}:doc:${id}`)
+        return data ? JSON.parse(data) : undefined
+      },
+      set: async (id: string, record: TLRecord) => {
+        await this.redis.set(
+          `room:${this.roomId}:doc:${id}`,
+          JSON.stringify(record)
+        )
+      },
+      delete: async (id: string) => {
+        await this.redis.del(`room:${this.roomId}:doc:${id}`)
+      },
+      getClock: () => parseInt(clock ?? '0', 10),
+      getChangesSince: async (since: number) => {
+        // Implement change tracking
+        return null
+      }
+    }
+    
+    const result = fn(txn)
+    
+    return {
+      result,
+      clock: txn.getClock(),
+      documentClock: parseInt(documentClock ?? '0', 10),
+      changes: null
+    }
+  }
+  
+  onChange(callback: () => void) {
+    // Subscribe to Redis pub/sub for external changes
+    const channel = `room:${this.roomId}:changes`
+    this.redis.subscribe(channel)
+    this.redis.on('message', (ch, msg) => {
+      if (ch === channel) callback()
+    })
+    
+    return () => {
+      this.redis.unsubscribe(channel)
+    }
+  }
+}
+```
+
+## Sync rate control
+
+The sync system automatically adjusts frame rate:
+
+- **30 FPS** when collaborating with others
+- **1 FPS** when working solo
+
+This is determined by presence mode:
+
+```tsx
+import { atom } from '@tldraw/state'
+import { useSync } from '@tldraw/sync'
+
+function MyApp() {
+  // Control presence mode
+  const presenceMode = atom('presenceMode', 'full' as 'full' | 'solo')
+  
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    userInfo: myUserInfo,
+    // Pass presence mode signal (internal API)
+    // presenceMode affects sync rate internally
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+## Schema customization
+
+Use custom schemas for extended functionality:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import { createTLSchema } from '@tldraw/tlschema'
+import { MyCustomShapeUtil } from './MyCustomShape'
+
+const customSchema = createTLSchema({
+  shapes: {
+    // Add custom shape types
+    myCustom: MyCustomShapeUtil
+  }
+})
+
+function MyApp() {
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    schema: customSchema,
+    shapeUtils: [MyCustomShapeUtil]
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+## Connection lifecycle hooks
+
+React to connection events:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import { useEffect } from 'react'
+
+function MyApp() {
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore
+  })
+  
+  useEffect(() => {
+    if (store.status === 'loading') {
+      console.log('Connecting...')
+    }
+    
+    if (store.status === 'synced-remote') {
+      console.log('Connected and synced')
+      
+      // Track connection status changes
+      if (store.connectionStatus === 'online') {
+        console.log('Online')
+      } else if (store.connectionStatus === 'offline') {
+        console.log('Offline - will reconnect')
+      }
+    }
+    
+    if (store.status === 'error') {
+      console.error('Sync error:', store.error)
+    }
+  }, [store.status, store.status === 'synced-remote' && store.connectionStatus])
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+## Performance optimization
+
+### Batch updates
+
+```tsx
+import { Editor } from 'tldraw'
+
+function batchCreateShapes(editor: Editor, count: number) {
+  // Use batch for better sync performance
+  editor.batch(() => {
+    for (let i = 0; i < count; i++) {
+      editor.createShape({
+        type: 'geo',
+        x: i * 100,
+        y: 100,
+        props: { w: 80, h: 80 }
+      })
+    }
+  })
+}
+```
+
+### Throttle rapid changes
+
+```tsx
+import { useThrottle } from './hooks'
+
+function MyComponent({ editor }: { editor: Editor }) {
+  const handleDrag = useThrottle((x: number, y: number) => {
+    editor.updateShape({
+      id: 'shape-1',
+      type: 'geo',
+      x,
+      y
+    })
+  }, 16) // ~60fps
+  
+  return <div onMouseMove={(e) => handleDrag(e.clientX, e.clientY)} />
+}
+```
+
+## Next steps
+
+<CardGroup cols={3}>
+  <Card title="Client API" icon="code" href="/sync/api/client">
+    Complete client API reference
+  </Card>
+  
+  <Card title="Server API" icon="server" href="/sync/api/server">
+    Server-side API reference
+  </Card>
+  
+  <Card title="Store sync" icon="database" href="/sync/api/store-sync">
+    Store synchronization reference
+  </Card>
+</CardGroup>

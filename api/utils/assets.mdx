@@ -1,0 +1,133 @@
+---
+title: Asset utilities
+description: Utilities for working with assets, images, and fonts in tldraw.
+---
+
+Asset utilities provide functions for manipulating images, sizing boxes, and loading fonts in tldraw applications.
+
+## containBoxSize
+
+Contains a size within a given box size while maintaining aspect ratio.
+
+```typescript
+function containBoxSize(
+  originalSize: BoxWidthHeight,
+  containBoxSize: BoxWidthHeight
+): BoxWidthHeight
+```
+
+<ParamField path="originalSize" type="BoxWidthHeight" required>
+  The original size of the asset with `w` and `h` properties.
+</ParamField>
+
+<ParamField path="containBoxSize" type="BoxWidthHeight" required>
+  The container size to fit within.
+</ParamField>
+
+**Returns:** Adjusted size that fits within the container while maintaining aspect ratio.
+
+### Example
+
+```typescript
+const originalSize = { w: 1920, h: 1080 }
+const containerSize = { w: 800, h: 600 }
+const fitted = containBoxSize(originalSize, containerSize)
+// Result: { w: 800, h: 450 }
+```
+
+## downsizeImage
+
+Resize an image Blob to be smaller than its current size with high quality.
+
+```typescript
+async function downsizeImage(
+  blob: Blob,
+  width: number,
+  height: number,
+  opts?: { type?: string; quality?: number }
+): Promise<Blob>
+```
+
+<ParamField path="blob" type="Blob" required>
+  The image Blob to resize.
+</ParamField>
+
+<ParamField path="width" type="number" required>
+  The desired width in pixels.
+</ParamField>
+
+<ParamField path="height" type="number" required>
+  The desired height in pixels.
+</ParamField>
+
+<ParamField path="opts.type" type="string">
+  The MIME type for the output image. Defaults to the input blob's type.
+</ParamField>
+
+<ParamField path="opts.quality" type="number">
+  The image quality from 0 to 1. Defaults to 0.85.
+</ParamField>
+
+**Returns:** A promise that resolves to the resized image Blob.
+
+### Example
+
+```typescript
+const image = await (await fetch('/image.jpg')).blob()
+const size = await getImageSize(image)
+const resizedImage = await downsizeImage(
+  image,
+  size.w / 2,
+  size.h / 2,
+  { type: 'image/jpeg', quality: 0.85 }
+)
+```
+
+## preloadFont
+
+Preload a font face and add it to the document fonts.
+
+```typescript
+async function preloadFont(
+  id: string,
+  font: TLTypeFace
+): Promise<FontFace>
+```
+
+<ParamField path="id" type="string" required>
+  The font family identifier.
+</ParamField>
+
+<ParamField path="font" type="TLTypeFace" required>
+  The font configuration object.
+</ParamField>
+
+**Returns:** A promise that resolves to the loaded FontFace instance.
+
+### TLTypeFace interface
+
+```typescript
+interface TLTypeFace {
+  url: string
+  display?: FontDisplay
+  featureSettings?: string
+  stretch?: string
+  style?: string
+  unicodeRange?: string
+  variant?: string
+  weight?: string
+  format?: string
+}
+```
+
+### Example
+
+```typescript
+const fontFace = await preloadFont('MyFont', {
+  url: 'https://example.com/fonts/myfont.woff2',
+  weight: '400',
+  style: 'normal',
+  format: 'woff2'
+})
+// Font is now available for use
+```

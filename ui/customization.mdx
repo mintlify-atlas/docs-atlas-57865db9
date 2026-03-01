@@ -1,0 +1,515 @@
+---
+title: Customizing the UI
+description: Learn how to customize tldraw's UI components, actions, tools, and appearance
+---
+
+The tldraw UI system is highly customizable. You can override components, modify actions and tools, change translations, and adjust the appearance to match your application's design.
+
+## Component overrides
+
+Replace any UI component with your own implementation:
+
+```tsx
+import { Tldraw, TLUiComponents } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomToolbar() {
+  return (
+    <div className="my-custom-toolbar">
+      {/* Your custom toolbar */}
+    </div>
+  )
+}
+
+const components: Partial<TLUiComponents> = {
+  Toolbar: CustomToolbar,
+}
+
+export default function App() {
+  return <Tldraw components={components} />
+}
+```
+
+### Removing components
+
+Set a component to `null` to remove it entirely:
+
+```tsx
+const components: Partial<TLUiComponents> = {
+  HelpMenu: null,
+  SharePanel: null,
+  TopPanel: null,
+}
+
+export default function App() {
+  return <Tldraw components={components} />
+}
+```
+
+### Extending existing components
+
+Wrap or extend default components:
+
+```tsx
+import {
+  Tldraw,
+  DefaultToolbar,
+  TldrawUiButton,
+  TldrawUiButtonIcon,
+  useEditor,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  
+  return (
+    <div className="custom-toolbar-wrapper">
+      <DefaultToolbar />
+      <div className="extra-tools">
+        <TldrawUiButton
+          type="tool"
+          onClick={() => {
+            // Custom action
+            console.log('Custom tool clicked')
+          }}
+        >
+          <TldrawUiButtonIcon icon="plus" />
+        </TldrawUiButton>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  return <Tldraw components={{ Toolbar: CustomToolbar }} />
+}
+```
+
+## Action overrides
+
+Modify or add custom actions to the editor:
+
+```tsx
+import { Tldraw, TLUiOverrides } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const overrides: TLUiOverrides = {
+  actions(editor, actions, helpers) {
+    return {
+      ...actions,
+      'my-custom-action': {
+        id: 'my-custom-action',
+        label: 'My custom action',
+        kbd: '$u',
+        icon: 'heart',
+        onSelect() {
+          // Custom action logic
+          const selectedShapes = editor.getSelectedShapes()
+          console.log('Custom action:', selectedShapes)
+        },
+      },
+      // Override existing action
+      copy: {
+        ...actions.copy,
+        onSelect() {
+          // Custom copy logic
+          console.log('Custom copy')
+          actions.copy.onSelect('menu')
+        },
+      },
+    }
+  },
+}
+
+export default function App() {
+  return <Tldraw overrides={overrides} />
+}
+```
+
+### Using helper functions
+
+The `helpers` parameter provides useful utilities:
+
+```tsx
+const overrides: TLUiOverrides = {
+  actions(editor, actions, helpers) {
+    return {
+      ...actions,
+      'export-with-toast': {
+        id: 'export-with-toast',
+        label: 'Export with notification',
+        onSelect() {
+          helpers.exportAs(editor.getSelectedShapes(), 'png')
+          helpers.addToast({
+            title: 'Exported!',
+            description: 'Your shapes have been exported.',
+          })
+        },
+      },
+    }
+  },
+}
+```
+
+Available helpers:
+- `addToast()` - Show toast notification
+- `removeToast()` - Remove toast
+- `clearToasts()` - Clear all toasts
+- `addDialog()` - Show dialog
+- `removeDialog()` - Remove dialog
+- `clearDialogs()` - Clear all dialogs
+- `msg()` - Get translated message
+- `isMobile` - Check if mobile
+- `insertMedia()` - Insert media files
+- `exportAs()` - Export content
+- `copyAs()` - Copy content
+- `printSelectionOrPages()` - Print content
+
+## Tool overrides
+
+Add custom tools or modify existing ones:
+
+```tsx
+import { Tldraw, TLUiOverrides } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const overrides: TLUiOverrides = {
+  tools(editor, tools, helpers) {
+    return {
+      ...tools,
+      'my-custom-tool': {
+        id: 'my-custom-tool',
+        label: 'Custom tool',
+        icon: 'color',
+        kbd: '$c',
+        onSelect() {
+          editor.setCurrentTool('my-custom-tool')
+        },
+      },
+    }
+  },
+}
+
+export default function App() {
+  return <Tldraw overrides={overrides} />
+}
+```
+
+<Info>
+  Tool overrides only add UI elements. To implement the actual tool behavior, you need to create a custom StateNode and add it to the editor's tools. See the [Custom tools](/getting-started/custom-tools) guide.
+</Info>
+
+## Translation overrides
+
+Customize or add translations:
+
+```tsx
+import { Tldraw, TLUiOverrides } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      'action.copy': 'Copy to clipboard',
+      'action.paste': 'Paste from clipboard',
+      'my-custom-action': 'My Custom Action',
+    },
+    es: {
+      'my-custom-action': 'Mi Acción Personalizada',
+    },
+  },
+}
+
+export default function App() {
+  return <Tldraw overrides={overrides} />
+}
+```
+
+See the [Translations](/ui/translations) page for more details.
+
+## Multiple overrides
+
+Combine multiple override objects:
+
+```tsx
+import { Tldraw, TLUiOverrides } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const actionOverrides: TLUiOverrides = {
+  actions(editor, actions) {
+    return {
+      ...actions,
+      'custom-action': {
+        id: 'custom-action',
+        label: 'Custom',
+        onSelect() { /* ... */ },
+      },
+    }
+  },
+}
+
+const toolOverrides: TLUiOverrides = {
+  tools(editor, tools) {
+    return {
+      ...tools,
+      'custom-tool': {
+        id: 'custom-tool',
+        label: 'Custom Tool',
+        onSelect() { /* ... */ },
+      },
+    }
+  },
+}
+
+export default function App() {
+  return <Tldraw overrides={[actionOverrides, toolOverrides]} />
+}
+```
+
+## Customizing menu content
+
+Customize what appears in menus by providing custom children to menu components:
+
+```tsx
+import {
+  Tldraw,
+  DefaultMainMenu,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  useEditor,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomMainMenu() {
+  const editor = useEditor()
+  
+  return (
+    <DefaultMainMenu>
+      <TldrawUiMenuGroup id="custom">
+        <TldrawUiMenuItem
+          id="custom-item"
+          label="Custom Item"
+          icon="heart"
+          onSelect={() => {
+            console.log('Custom item selected')
+          }}
+        />
+      </TldrawUiMenuGroup>
+    </DefaultMainMenu>
+  )
+}
+
+export default function App() {
+  return <Tldraw components={{ MainMenu: CustomMainMenu }} />
+}
+```
+
+## Customizing toolbar content
+
+Modify what tools appear in the toolbar:
+
+```tsx
+import {
+  Tldraw,
+  DefaultToolbar,
+  SelectToolbarItem,
+  HandToolbarItem,
+  DrawToolbarItem,
+  EraserToolbarItem,
+  TextToolbarItem,
+  RectangleToolbarItem,
+  EllipseToolbarItem,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomToolbar() {
+  return (
+    <DefaultToolbar>
+      <SelectToolbarItem />
+      <HandToolbarItem />
+      <DrawToolbarItem />
+      <EraserToolbarItem />
+      <TextToolbarItem />
+      <RectangleToolbarItem />
+      <EllipseToolbarItem />
+      {/* Only these tools will appear */}
+    </DefaultToolbar>
+  )
+}
+
+export default function App() {
+  return <Tldraw components={{ Toolbar: CustomToolbar }} />
+}
+```
+
+## Custom styling with CSS
+
+Override tldraw's CSS variables to customize colors and appearance:
+
+```css
+/* Custom theme colors */
+.tl-theme__light {
+  --color-primary: #ff0000;
+  --color-text: #333333;
+  --color-background: #ffffff;
+  --color-panel: #f5f5f5;
+}
+
+.tl-theme__dark {
+  --color-primary: #ff6b6b;
+  --color-text: #ffffff;
+  --color-background: #1a1a1a;
+  --color-panel: #2d2d2d;
+}
+
+/* Customize toolbar */
+.tlui-main-toolbar {
+  background: var(--color-panel);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+/* Customize buttons */
+.tlui-button {
+  border-radius: 8px;
+}
+
+.tlui-button__tool[data-isactive='true'] {
+  background: var(--color-primary);
+}
+```
+
+Then import your custom CSS after tldraw's CSS:
+
+```tsx
+import 'tldraw/tldraw.css'
+import './custom-theme.css'
+
+export default function App() {
+  return <Tldraw />
+}
+```
+
+## Asset URL overrides
+
+Customize where icons, fonts, and translations are loaded from:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <Tldraw
+      assetUrls={{
+        icons: {
+          'tool-pointer': '/custom-icons/pointer.svg',
+          // ... other icons
+        },
+        fonts: {
+          draw: '/custom-fonts/draw.woff2',
+          sans: '/custom-fonts/sans.woff2',
+          serif: '/custom-fonts/serif.woff2',
+          mono: '/custom-fonts/mono.woff2',
+        },
+        translations: {
+          en: '/custom-translations/en.json',
+          // ... other languages
+        },
+      }}
+    />
+  )
+}
+```
+
+## Theming with class names
+
+Add custom class names to control theming:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <div className="my-custom-theme">
+      <Tldraw />
+    </div>
+  )
+}
+```
+
+```css
+.my-custom-theme .tlui-layout {
+  /* Custom styles scoped to your theme */
+}
+```
+
+## Custom top panel
+
+Add custom content to the top center of the UI:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomTopPanel() {
+  return (
+    <div style={{ padding: '8px' }}>
+      <h1>My Custom App</h1>
+    </div>
+  )
+}
+
+export default function App() {
+  return <Tldraw components={{ TopPanel: CustomTopPanel }} />
+}
+```
+
+## Readonly mode customization
+
+Customize behavior in readonly mode:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  const isReadonly = editor.getInstanceState().isReadonly
+  
+  if (isReadonly) {
+    return <div>View-only mode</div>
+  }
+  
+  return <DefaultToolbar />
+}
+
+export default function App() {
+  return (
+    <Tldraw
+      components={{ Toolbar: CustomToolbar }}
+      onMount={(editor) => {
+        editor.updateInstanceState({ isReadonly: true })
+      }}
+    />
+  )
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Menus and toolbars" icon="wrench" href="/ui/menus-and-toolbars">
+    Deep dive into customizing menus and toolbars
+  </Card>
+  
+  <Card title="Translations" icon="language" href="/ui/translations">
+    Add custom translations and support multiple languages
+  </Card>
+  
+  <Card title="Custom tools" icon="hammer" href="/getting-started/custom-tools">
+    Create custom tools with full behavior
+  </Card>
+</CardGroup>

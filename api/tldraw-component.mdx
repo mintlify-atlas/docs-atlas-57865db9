@@ -1,0 +1,360 @@
+---
+title: Tldraw and TldrawEditor components
+description: React components for rendering the tldraw editor
+---
+
+The `Tldraw` and `TldrawEditor` components are the primary React components for integrating tldraw into your application.
+
+## Tldraw
+
+The complete "batteries included" tldraw component with UI, shapes, and tools.
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function App() {
+  return (
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <Tldraw />
+    </div>
+  )
+}
+```
+
+### Props
+
+<ParamField path="store" type="TLStore | TLStoreWithStatus">
+  A store to use for the editor's data. If not provided, a new store will be created.
+  
+  ```tsx
+  const store = createTLStore({ shapeUtils: [...] })
+  <Tldraw store={store} />
+  ```
+</ParamField>
+
+<ParamField path="shapeUtils" type="TLAnyShapeUtilConstructor[]">
+  Array of custom shape utility classes. These will be merged with the default shapes.
+  
+  ```tsx
+  <Tldraw shapeUtils={[MyCustomShapeUtil]} />
+  ```
+</ParamField>
+
+<ParamField path="bindingUtils" type="TLAnyBindingUtilConstructor[]">
+  Array of custom binding utility classes for managing shape relationships.
+</ParamField>
+
+<ParamField path="tools" type="TLStateNodeConstructor[]">
+  Array of custom tool classes. These will be merged with the default tools.
+  
+  ```tsx
+  <Tldraw tools={[MyCustomTool]} />
+  ```
+</ParamField>
+
+<ParamField path="components" type="TLComponents">
+  Custom React components to override default UI elements.
+  
+  ```tsx
+  <Tldraw 
+    components={{
+      Toolbar: MyCustomToolbar,
+      KeyboardShortcutsDialog: null, // Disable keyboard shortcuts dialog
+      Scribble: MyCustomScribble
+    }} 
+  />
+  ```
+</ParamField>
+
+<ParamField path="onMount" type="(editor: Editor) => void">
+  Callback that fires when the editor is mounted and ready.
+  
+  ```tsx
+  <Tldraw 
+    onMount={(editor) => {
+      console.log('Editor ready!', editor)
+      editor.createShape({ type: 'geo', x: 100, y: 100 })
+    }} 
+  />
+  ```
+</ParamField>
+
+<ParamField path="initialState" type="string">
+  The initial active tool or state. Defaults to 'select'.
+  
+  ```tsx
+  <Tldraw initialState="draw" />
+  ```
+</ParamField>
+
+<ParamField path="autoFocus" type="boolean">
+  Whether to automatically focus the editor when it mounts. Defaults to true.
+</ParamField>
+
+<ParamField path="inferDarkMode" type="boolean">
+  Whether to infer dark mode from the user's system preferences. Defaults to false.
+</ParamField>
+
+<ParamField path="hideUi" type="boolean">
+  Hide all UI elements. Useful when you want to build a completely custom UI.
+  
+  ```tsx
+  <Tldraw hideUi />
+  ```
+</ParamField>
+
+<ParamField path="assetUrls" type="TLUiAssetUrlOverrides">
+  Custom URLs for assets like icons and fonts.
+  
+  ```tsx
+  const assetUrls = {
+    icons: '/custom-icons/',
+    fonts: '/custom-fonts/'
+  }
+  <Tldraw assetUrls={assetUrls} />
+  ```
+</ParamField>
+
+<ParamField path="embeds" type="TLEmbedDefinition[]">
+  Custom embed definitions for embedding external content.
+  
+  ```tsx
+  const customEmbeds = [
+    {
+      type: 'myembed',
+      title: 'My Custom Embed',
+      hostnames: ['mysite.com'],
+      // ... more configuration
+    }
+  ]
+  <Tldraw embeds={customEmbeds} />
+  ```
+</ParamField>
+
+<ParamField path="acceptedImageMimeTypes" type="string[]">
+  MIME types to accept for image uploads. Defaults to common image formats.
+</ParamField>
+
+<ParamField path="acceptedVideoMimeTypes" type="string[]">
+  MIME types to accept for video uploads. Defaults to common video formats.
+</ParamField>
+
+<ParamField path="maxImageDimension" type="number">
+  Maximum dimension (width or height) for uploaded images. Images larger than this will be resized.
+</ParamField>
+
+<ParamField path="maxAssetSize" type="number">
+  Maximum file size in bytes for uploaded assets.
+</ParamField>
+
+### Complete example
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function MyApp() {
+  return (
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <Tldraw
+        onMount={(editor) => {
+          // Add initial shapes
+          editor.createShapes([
+            {
+              type: 'geo',
+              x: 100,
+              y: 100,
+              props: { w: 100, h: 100, geo: 'rectangle' }
+            }
+          ])
+        }}
+        components={{
+          Toolbar: () => <div>My Custom Toolbar</div>
+        }}
+        hideUi={false}
+        inferDarkMode={true}
+      />
+    </div>
+  )
+}
+```
+
+## TldrawEditor
+
+The core editor component without UI. Use this when you want complete control over the interface.
+
+```tsx
+import { TldrawEditor } from '@tldraw/editor'
+import '@tldraw/editor/editor.css'
+
+function App() {
+  return (
+    <TldrawEditor
+      shapeUtils={defaultShapeUtils}
+      bindingUtils={defaultBindingUtils}
+      tools={defaultTools}
+    >
+      <YourCustomUI />
+    </TldrawEditor>
+  )
+}
+```
+
+### Props
+
+<ParamField path="store" type="TLStore | TLStoreWithStatus" required>
+  A store instance for the editor's data. Can be created with `createTLStore`.
+  
+  ```tsx
+  const store = createTLStore({ 
+    shapeUtils: defaultShapeUtils,
+    bindingUtils: defaultBindingUtils 
+  })
+  
+  <TldrawEditor store={store} />
+  ```
+</ParamField>
+
+<ParamField path="shapeUtils" type="TLAnyShapeUtilConstructor[]" required>
+  Array of shape utility classes. Unlike Tldraw, you must provide these explicitly.
+  
+  ```tsx
+  import { defaultShapeUtils } from 'tldraw'
+  
+  <TldrawEditor shapeUtils={defaultShapeUtils} />
+  ```
+</ParamField>
+
+<ParamField path="bindingUtils" type="TLAnyBindingUtilConstructor[]" required>
+  Array of binding utility classes.
+  
+  ```tsx
+  import { defaultBindingUtils } from 'tldraw'
+  
+  <TldrawEditor bindingUtils={defaultBindingUtils} />
+  ```
+</ParamField>
+
+<ParamField path="tools" type="TLStateNodeConstructor[]" required>
+  Array of tool classes.
+  
+  ```tsx
+  import { defaultTools } from 'tldraw'
+  
+  <TldrawEditor tools={defaultTools} />
+  ```
+</ParamField>
+
+<ParamField path="components" type="TLEditorComponents">
+  Custom React components for editor elements (not UI elements).
+  
+  ```tsx
+  <TldrawEditor 
+    components={{
+      Scribble: MyCustomScribble,
+      ShapeIndicators: MyCustomIndicators,
+      Handles: MyCustomHandles
+    }} 
+  />
+  ```
+</ParamField>
+
+<ParamField path="onMount" type="(editor: Editor) => void">
+  Callback when the editor is ready.
+</ParamField>
+
+<ParamField path="initialState" type="string">
+  The initial active tool or state.
+</ParamField>
+
+<ParamField path="autoFocus" type="boolean">
+  Whether to automatically focus the editor.
+</ParamField>
+
+<ParamField path="options" type="Partial<TldrawOptions>">
+  Editor configuration options including camera and text settings.
+</ParamField>
+
+### Example with custom UI
+
+```tsx
+import { TldrawEditor, useEditor } from '@tldraw/editor'
+import { defaultShapeUtils, defaultBindingUtils, defaultTools } from 'tldraw'
+import '@tldraw/editor/editor.css'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  
+  return (
+    <div style={{ position: 'absolute', top: 0, left: 0 }}>
+      <button onClick={() => editor.setCurrentTool('select')}>Select</button>
+      <button onClick={() => editor.setCurrentTool('draw')}>Draw</button>
+      <button onClick={() => editor.undo()}>Undo</button>
+      <button onClick={() => editor.redo()}>Redo</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <TldrawEditor
+        shapeUtils={defaultShapeUtils}
+        bindingUtils={defaultBindingUtils}
+        tools={defaultTools}
+      >
+        <CustomToolbar />
+      </TldrawEditor>
+    </div>
+  )
+}
+```
+
+## Accessing the editor instance
+
+Use the `useEditor` hook to access the editor instance within child components:
+
+```tsx
+import { useEditor } from '@tldraw/editor'
+
+function MyComponent() {
+  const editor = useEditor()
+  
+  const handleClick = () => {
+    const selectedShapes = editor.getSelectedShapes()
+    console.log('Selected:', selectedShapes)
+  }
+  
+  return <button onClick={handleClick}>Log Selection</button>
+}
+```
+
+## Store creation
+
+Create a store to persist data or control initialization:
+
+```tsx
+import { createTLStore, defaultShapeUtils, defaultBindingUtils } from 'tldraw'
+
+const store = createTLStore({
+  shapeUtils: defaultShapeUtils,
+  bindingUtils: defaultBindingUtils
+})
+
+// Load data from storage
+const snapshot = localStorage.getItem('my-drawing')
+if (snapshot) {
+  store.loadSnapshot(JSON.parse(snapshot))
+}
+
+// Save data to storage
+store.listen((changes) => {
+  const snapshot = store.getSnapshot()
+  localStorage.setItem('my-drawing', JSON.stringify(snapshot))
+})
+
+function App() {
+  return <Tldraw store={store} />
+}
+```

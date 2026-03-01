@@ -1,0 +1,261 @@
+---
+title: Custom shape
+description: Create custom shapes by extending ShapeUtil
+---
+
+You can create custom shapes in tldraw by creating a shape util and passing it to the Tldraw component. Shape utils define how shapes behave and render.
+
+## Basic custom shape
+
+```tsx CustomShapeExample.tsx
+import {
+  Geometry2d,
+  HTMLContainer,
+  RecordProps,
+  Rectangle2d,
+  ShapeUtil,
+  T,
+  TLResizeInfo,
+  TLShape,
+  Tldraw,
+  resizeBox,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const MY_CUSTOM_SHAPE_TYPE = 'my-custom-shape'
+
+// [1] Extend the global shape props map
+declare module 'tldraw' {
+  export interface TLGlobalShapePropsMap {
+    [MY_CUSTOM_SHAPE_TYPE]: { w: number; h: number; text: string }
+  }
+}
+
+// [2] Define the shape type
+type ICustomShape = TLShape<typeof MY_CUSTOM_SHAPE_TYPE>
+
+// [3] Create the shape util
+export class MyShapeUtil extends ShapeUtil<ICustomShape> {
+  static override type = MY_CUSTOM_SHAPE_TYPE
+  static override props: RecordProps<ICustomShape> = {
+    w: T.number,
+    h: T.number,
+    text: T.string,
+  }
+
+  // Define default props
+  getDefaultProps(): ICustomShape['props'] {
+    return {
+      w: 200,
+      h: 200,
+      text: "I'm a shape!",
+    }
+  }
+
+  // Control shape behavior
+  override canEdit() {
+    return false
+  }
+  override canResize() {
+    return true
+  }
+  override isAspectRatioLocked() {
+    return false
+  }
+
+  // Define geometry for hit-testing and bindings
+  getGeometry(shape: ICustomShape): Geometry2d {
+    return new Rectangle2d({
+      width: shape.props.w,
+      height: shape.props.h,
+      isFilled: true,
+    })
+  }
+
+  // Handle resizing
+  override onResize(shape: any, info: TLResizeInfo<any>) {
+    return resizeBox(shape, info)
+  }
+
+  // Render the shape
+  component(shape: ICustomShape) {
+    return (
+      <HTMLContainer style={{ backgroundColor: '#efefef' }}>
+        {shape.props.text}
+      </HTMLContainer>
+    )
+  }
+
+  // Render the selection indicator
+  indicator(shape: ICustomShape) {
+    return <rect width={shape.props.w} height={shape.props.h} />
+  }
+}
+
+// [4] Pass to Tldraw component
+const customShape = [MyShapeUtil]
+
+export default function CustomShapeExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw
+        shapeUtils={customShape}
+        onMount={(editor) => {
+          editor.createShape({ type: MY_CUSTOM_SHAPE_TYPE, x: 100, y: 100 })
+        }}
+      />
+    </div>
+  )
+}
+```
+
+## Key concepts
+
+### 1. Extend TLGlobalShapePropsMap
+
+First, extend the global type system to include your shape's properties:
+
+```tsx
+declare module 'tldraw' {
+  export interface TLGlobalShapePropsMap {
+    'my-custom-shape': { w: number; h: number; text: string }
+  }
+}
+```
+
+### 2. Define shape type
+
+Create a type for your shape using `TLShape`:
+
+```tsx
+type ICustomShape = TLShape<'my-custom-shape'>
+```
+
+### 3. Create ShapeUtil class
+
+Extend `ShapeUtil` and implement required methods:
+
+<CodeGroup>
+
+```tsx Props definition
+static override type = 'my-custom-shape'
+static override props: RecordProps<ICustomShape> = {
+  w: T.number,
+  h: T.number,
+  text: T.string,
+}
+```
+
+```tsx Default props
+getDefaultProps(): ICustomShape['props'] {
+  return {
+    w: 200,
+    h: 200,
+    text: "I'm a shape!",
+  }
+}
+```
+
+```tsx Geometry
+getGeometry(shape: ICustomShape): Geometry2d {
+  return new Rectangle2d({
+    width: shape.props.w,
+    height: shape.props.h,
+    isFilled: true,
+  })
+}
+```
+
+```tsx Component
+component(shape: ICustomShape) {
+  return (
+    <HTMLContainer style={{ backgroundColor: '#efefef' }}>
+      {shape.props.text}
+    </HTMLContainer>
+  )
+}
+```
+
+</CodeGroup>
+
+## Using BaseBoxShapeUtil
+
+For box-shaped shapes, extend `BaseBoxShapeUtil` to get default implementations:
+
+```tsx
+import { BaseBoxShapeUtil } from 'tldraw'
+
+class MyBoxShape extends BaseBoxShapeUtil<ICustomShape> {
+  static override type = 'my-box-shape'
+  static override props = {
+    w: T.number,
+    h: T.number,
+  }
+
+  getDefaultProps(): ICustomShape['props'] {
+    return { w: 200, h: 200 }
+  }
+
+  component(shape: ICustomShape) {
+    return <HTMLContainer>Box content</HTMLContainer>
+  }
+
+  indicator(shape: ICustomShape) {
+    return <rect width={shape.props.w} height={shape.props.h} />
+  }
+}
+```
+
+<Note>
+When you extend `BaseBoxShapeUtil`, you don't need to define `getGeometry` or `onResize` - they're provided automatically.
+</Note>
+
+## Shape methods
+
+### Behavior methods
+
+```tsx
+canEdit(): boolean  // Whether shape can enter edit mode
+canResize(): boolean  // Whether shape can be resized
+canBind(): boolean  // Whether arrows can bind to this shape
+isAspectRatioLocked(): boolean  // Lock aspect ratio when resizing
+```
+
+### Rendering methods
+
+```tsx
+component(shape): JSX.Element  // Main shape rendering
+indicator(shape): JSX.Element  // Selection outline
+```
+
+### Event handlers
+
+```tsx
+onResize(shape, info): TLShape  // Handle resize events
+onDoubleClick(shape): void  // Handle double-clicks
+onEditEnd(shape): void  // Handle edit mode exit
+```
+
+## Validators
+
+Use tldraw's validator library to define type-safe props:
+
+```tsx
+import { T } from 'tldraw'
+
+static override props = {
+  w: T.number,
+  h: T.number,
+  text: T.string,
+  color: T.string,
+  opacity: T.number,
+}
+```
+
+The validator ensures the store always has valid shape data.
+
+## Related
+
+- [Custom tool](/examples/custom-tool) - Create tools for your shapes
+- [Custom styles](/examples/custom-styles) - Add custom style properties
+- [ShapeUtil reference](/reference/editor/ShapeUtil)

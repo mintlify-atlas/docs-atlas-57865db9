@@ -1,0 +1,219 @@
+---
+title: UI system overview
+description: Learn about tldraw's comprehensive UI system, including components, layout, and architecture
+---
+
+The tldraw UI system provides a complete, customizable interface for the canvas editor. It includes toolbars, menus, panels, and all the controls users need to interact with the editor.
+
+## Architecture
+
+The UI system is built on top of the core `@tldraw/editor` package and consists of several key layers:
+
+### TldrawUi component
+
+The `TldrawUi` component is the root of the UI system. It provides context providers and renders the complete interface:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return <Tldraw />
+}
+```
+
+The `Tldraw` component internally uses `TldrawUi` to render the interface. You can also use `TldrawUi` separately:
+
+```tsx
+import { Editor, TldrawUi } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <Editor>
+      <TldrawUi>
+        {/* Canvas will be rendered here */}
+      </TldrawUi>
+    </Editor>
+  )
+}
+```
+
+### Context providers
+
+The UI system uses multiple React context providers to manage state:
+
+<Card title="TldrawUiContextProvider" icon="code">
+  Main provider that wraps all UI functionality, including:
+  - Asset URLs for icons and fonts
+  - UI overrides (actions, tools, translations)
+  - Component overrides
+  - Event handlers
+</Card>
+
+<Card title="TldrawUiComponentsProvider" icon="puzzle-piece">
+  Provides access to all UI components, allowing you to override individual components like toolbars, menus, and panels.
+</Card>
+
+<Card title="TldrawUiTranslationProvider" icon="language">
+  Manages translations and locale settings, supporting 50+ languages out of the box.
+</Card>
+
+## Layout structure
+
+The UI uses a flexible layout system that adapts to different screen sizes:
+
+```tsx
+<div className="tlui-layout">
+  <div className="tlui-layout__top">
+    <div className="tlui-layout__top__left">
+      {/* MenuPanel, HelperButtons */}
+    </div>
+    <div className="tlui-layout__top__center">
+      {/* TopPanel (custom content) */}
+    </div>
+    <div className="tlui-layout__top__right">
+      {/* SharePanel, StylePanel */}
+    </div>
+  </div>
+  
+  <div className="tlui-layout__bottom">
+    <div className="tlui-layout__bottom__main">
+      {/* NavigationPanel, Toolbar, HelpMenu */}
+    </div>
+    {/* DebugPanel (when debug mode is enabled) */}
+  </div>
+  
+  {/* Dialogs, Toasts */}
+</div>
+```
+
+## Responsive design
+
+The UI system includes built-in breakpoints for responsive behavior:
+
+| Breakpoint | Width | Behavior |
+|------------|-------|----------|
+| MOBILE | < 640px | Compact mobile layout, toolbar hidden while editing |
+| TABLET_SM | 640px - 840px | Tablet layout with simplified controls |
+| TABLET | 840px - 1023px | Full tablet layout |
+| DESKTOP | ≥ 1024px | Full desktop layout with all features |
+
+## Hiding the UI
+
+You can completely hide the UI while keeping the canvas visible:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return <Tldraw hideUi />
+}
+```
+
+This renders only the canvas without any toolbars, menus, or controls.
+
+## Focus mode
+
+Focus mode provides a minimal interface with just a single button to exit:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        editor.updateInstanceState({ isFocusMode: true })
+      }}
+    />
+  )
+}
+```
+
+Users can toggle focus mode with `Ctrl+./Cmd+.` or through the UI.
+
+## Component structure
+
+The UI is composed of these main component categories:
+
+<CardGroup cols={2}>
+  <Card title="Toolbars" icon="wrench" href="/ui/menus-and-toolbars#toolbars">
+    Main toolbar with drawing tools, quick actions, and tool-specific options
+  </Card>
+  
+  <Card title="Menus" icon="bars" href="/ui/menus-and-toolbars#menus">
+    Main menu, context menu, actions menu, and specialized menus
+  </Card>
+  
+  <Card title="Panels" icon="table-columns">
+    Style panel, navigation panel, share panel, and debug panel
+  </Card>
+  
+  <Card title="Dialogs" icon="window">
+    Modal dialogs for links, embeds, keyboard shortcuts, and more
+  </Card>
+</CardGroup>
+
+## Accessibility
+
+The UI system includes comprehensive accessibility features:
+
+- Screen reader announcements for important state changes
+- Keyboard navigation throughout the interface
+- Focus management and keyboard shortcuts
+- Enhanced accessibility mode for additional features
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        editor.user.updateUserPreferences({ enhancedA11yMode: true })
+      }}
+    />
+  )
+}
+```
+
+## Event handling
+
+You can listen to UI events to track user interactions:
+
+```tsx
+import { Tldraw, TLUiEventHandler } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const handleUiEvent: TLUiEventHandler = (name, data) => {
+  console.log('UI event:', name, data)
+}
+
+export default function App() {
+  return <Tldraw onUiEvent={handleUiEvent} />
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Built-in components" icon="cube" href="/ui/components">
+    Explore all available UI components and primitives
+  </Card>
+  
+  <Card title="Customization" icon="paint-brush" href="/ui/customization">
+    Learn how to customize and override UI components
+  </Card>
+  
+  <Card title="Menus and toolbars" icon="wrench" href="/ui/menus-and-toolbars">
+    Deep dive into toolbars, menus, and their customization
+  </Card>
+  
+  <Card title="Translations" icon="language" href="/ui/translations">
+    Add custom translations and support multiple languages
+  </Card>
+</CardGroup>

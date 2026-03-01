@@ -1,0 +1,364 @@
+---
+title: FrameShapeUtil
+description: Shape utility for frame containers that group and clip child shapes
+---
+
+`FrameShapeUtil` handles frame shapes which act as containers for organizing and clipping child shapes, with optional colors and heading labels.
+
+## Type signature
+
+```typescript
+class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape>
+```
+
+## Features
+
+- Container for child shapes
+- Automatic child clipping
+- Named headings with rotation support
+- Optional color themes
+- Export bounds container
+- Drag-to-reparent children
+- Configurable child resizing
+- Auto-fit to content
+
+## Configuration options
+
+```typescript
+interface FrameShapeOptions {
+  /**
+   * When true, the frame will display colors for headings and background.
+   */
+  showColors: boolean // default: false
+  
+  /**
+   * When true, the frame will resize its children when the frame itself is resized.
+   */
+  resizeChildren: boolean // default: false
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLFrameShape['props'] {
+  return {
+    w: 160 * 2,
+    h: 90 * 2,
+    name: '',
+    color: 'black',
+  }
+}
+```
+
+## Properties
+
+<ParamField path="w" type="number" required>
+  Width of the frame.
+</ParamField>
+
+<ParamField path="h" type="number" required>
+  Height of the frame.
+</ParamField>
+
+<ParamField path="name" type="string" default="''">
+  The frame's heading text.
+</ParamField>
+
+<ParamField path="color" type="TLDefaultColorStyle" default="'black'">
+  Frame color (only visible when `showColors` is true).
+</ParamField>
+
+## Geometry
+
+Frames have composite geometry including the frame body and heading:
+
+```typescript
+getGeometry(shape: TLFrameShape): Geometry2d {
+  const labelSide = getFrameHeadingSide(editor, shape)
+  const headingSize = getFrameHeadingSize(editor, shape, opts)
+  
+  // Calculate heading position based on rotation
+  let x: number, y: number
+  switch (labelSide) {
+    case 0: // top
+    case 1: // right
+    case 2: // bottom
+    case 3: // left
+  }
+  
+  return new Group2d({
+    children: [
+      new Rectangle2d({
+        width: shape.props.w,
+        height: shape.props.h,
+        isFilled: false,
+      }),
+      new Rectangle2d({
+        x, y, width, height,
+        isFilled: true,
+        isLabel: true,
+        excludeFromShapeBounds: true,
+      }),
+    ],
+  })
+}
+```
+
+## Methods
+
+### canEdit()
+
+```typescript
+canEdit(shape: TLFrameShape, info: TLEditStartInfo) {
+  return info.type === 'click-header' || info.type === 'unknown'
+}
+```
+
+Frames can be edited by clicking the header or programmatically.
+
+### canResize()
+
+```typescript
+canResize() {
+  return true
+}
+```
+
+Frames can be resized.
+
+### canResizeChildren()
+
+```typescript
+canResizeChildren() {
+  return this.options.resizeChildren
+}
+```
+
+Whether to resize children when resizing the frame (configurable).
+
+### isExportBoundsContainer()
+
+```typescript
+isExportBoundsContainer(): boolean {
+  return true
+}
+```
+
+Frames act as export bounds containers.
+
+### providesBackgroundForChildren()
+
+```typescript
+providesBackgroundForChildren(): boolean {
+  return true
+}
+```
+
+Frame provides background layer for child rendering.
+
+### getClipPath()
+
+```typescript
+getClipPath(shape: TLFrameShape) {
+  return this.editor.getShapeGeometry(shape.id).vertices
+}
+```
+
+Returns clip path for children.
+
+### canReceiveNewChildrenOfType()
+
+```typescript
+canReceiveNewChildrenOfType(shape: TLShape) {
+  return !shape.isLocked
+}
+```
+
+Unlocked shapes can be reparented into frames.
+
+### getText()
+
+```typescript
+getText(shape: TLFrameShape): string | undefined {
+  return shape.props.name
+}
+```
+
+Returns frame name for search and accessibility.
+
+### getAriaDescriptor()
+
+```typescript
+getAriaDescriptor(shape: TLFrameShape) {
+  return shape.props.name
+}
+```
+
+## Child management
+
+### onDragShapesIn()
+
+Handles dragging shapes into the frame:
+
+```typescript
+onDragShapesIn(
+  shape: TLFrameShape,
+  draggingShapes: TLShape[],
+  { initialParentIds, initialIndices }: TLDragShapesOverInfo
+) {
+  if (draggingShapes.every((s) => s.parentId === shape.id)) return
+
+  // Prevent reparenting if any dragging shape is an ancestor
+  if (draggingShapes.some((s) => editor.hasAncestor(shape, s.id))) return
+
+  // Reparent shapes to this frame
+  editor.reparentShapes(draggingShapes, shape.id)
+
+  // Restore original indices if possible
+  if (canRestoreOriginalIndices) {
+    // ...
+  }
+}
+```
+
+### onDragShapesOut()
+
+Handles dragging shapes out of the frame:
+
+```typescript
+onDragShapesOut(
+  shape: TLFrameShape,
+  draggingShapes: TLShape[],
+  info: TLDragShapesOutInfo
+): void {
+  if (!info.nextDraggingOverShapeId) {
+    editor.reparentShapes(
+      draggingShapes.filter((s) => s.parentId === shape.id),
+      editor.getCurrentPageId()
+    )
+  }
+}
+```
+
+## Auto-fit features
+
+### onDoubleClickEdge()
+
+Fits frame to children along the double-clicked edge:
+
+```typescript
+onDoubleClickEdge(shape: TLFrameShape, info: TLClickEventInfo) {
+  if (info.target !== 'selection') return
+  const { handle } = info
+  if (!handle) return
+
+  const isHorizontalEdge = handle === 'left' || handle === 'right'
+  const isVerticalEdge = handle === 'top' || handle === 'bottom'
+
+  const { dx, dy, w, h } = getFrameChildrenBounds(children, this.editor, { padding: 10 })
+
+  // Adjust children positions
+  const changes: TLShapePartial[] = childIds.map((childId) => {
+    const childShape = this.editor.getShape(childId)!
+    return {
+      id: childShape.id,
+      type: childShape.type,
+      x: isHorizontalEdge ? childShape.x + dx : childShape.x,
+      y: isVerticalEdge ? childShape.y + dy : childShape.y,
+    }
+  })
+
+  this.editor.updateShapes(changes)
+
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      w: isHorizontalEdge ? w : shape.props.w,
+      h: isVerticalEdge ? h : shape.props.h,
+    },
+  }
+}
+```
+
+### onDoubleClickCorner()
+
+Fits frame to all children:
+
+```typescript
+onDoubleClickCorner(shape: TLFrameShape) {
+  fitFrameToContent(this.editor, shape.id, { padding: 10 })
+  return { id: shape.id, type: shape.type }
+}
+```
+
+## Indicator
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLFrameShape): Path2D {
+  const path = new Path2D()
+  path.rect(0, 0, shape.props.w, shape.props.h)
+  return path
+}
+```
+
+## Example: Create frames
+
+```typescript
+// Create basic frame
+editor.createShape({
+  type: 'frame',
+  props: {
+    w: 400,
+    h: 300,
+    name: 'Design System',
+  }
+})
+
+// Create colored frame (with colors enabled)
+const CustomFrameUtil = FrameShapeUtil.configure({ showColors: true })
+
+editor.createShape({
+  type: 'frame',
+  props: {
+    w: 600,
+    h: 400,
+    name: 'Sprint 1',
+    color: 'blue',
+  }
+})
+```
+
+## Example: Manage frame children
+
+```typescript
+// Reparent shapes into frame
+const frameId = frame.id
+const childShapes = [shape1, shape2, shape3]
+editor.reparentShapes(childShapes, frameId)
+
+// Get all children of a frame
+const children = editor.getSortedChildIdsForParent(frameId)
+  .map(id => editor.getShape(id))
+  .filter(Boolean)
+
+// Fit frame to its children
+import { fitFrameToContent } from 'tldraw'
+fitFrameToContent(editor, frameId, { padding: 20 })
+```
+
+## Example: Custom configuration
+
+```typescript
+import { FrameShapeUtil } from 'tldraw'
+
+const CustomFrameUtil = FrameShapeUtil.configure({
+  showColors: true,
+  resizeChildren: true,
+})
+```

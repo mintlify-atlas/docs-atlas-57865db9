@@ -1,0 +1,262 @@
+---
+title: VideoShapeUtil
+description: Shape utility for video shapes with playback controls
+---
+
+`VideoShapeUtil` handles video shapes with support for playback, fullscreen, and accessibility features.
+
+## Type signature
+
+```typescript
+class VideoShapeUtil extends BaseBoxShapeUtil<TLVideoShape>
+```
+
+## Features
+
+- Video playback from assets
+- Autoplay support
+- Playback controls when editing
+- Fullscreen capability
+- Respects reduced motion preferences
+- Alt text for accessibility
+- Optional URL linking
+- Static frame export for SVG
+
+## Configuration options
+
+```typescript
+interface VideoShapeOptions {
+  /**
+   * Should videos play automatically?
+   */
+  autoplay: boolean // default: true
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLVideoShape['props'] {
+  return {
+    w: 100,
+    h: 100,
+    assetId: null,
+    autoplay: this.options.autoplay,
+    url: '',
+    altText: '',
+    // Legacy props (not used but kept for compatibility)
+    time: 0,
+    playing: true,
+  }
+}
+```
+
+## Properties
+
+<ParamField path="w" type="number" required>
+  Width of the video shape.
+</ParamField>
+
+<ParamField path="h" type="number" required>
+  Height of the video shape.
+</ParamField>
+
+<ParamField path="assetId" type="TLAssetId | null" required>
+  ID of the associated video asset.
+</ParamField>
+
+<ParamField path="autoplay" type="boolean">
+  Whether the video should autoplay (when not in reduced motion mode).
+</ParamField>
+
+<ParamField path="url" type="string" default="''">
+  Optional URL for hyperlinking.
+</ParamField>
+
+<ParamField path="altText" type="string" default="''">
+  Alternative text for accessibility.
+</ParamField>
+
+<ParamField path="time" type="number" default="0">
+  Legacy property, not currently used.
+</ParamField>
+
+<ParamField path="playing" type="boolean" default="true">
+  Legacy property, not currently used.
+</ParamField>
+
+## Methods
+
+### canEdit()
+
+```typescript
+canEdit() {
+  return true
+}
+```
+
+Video shapes can be double-clicked to show controls.
+
+### isAspectRatioLocked()
+
+```typescript
+isAspectRatioLocked() {
+  return true
+}
+```
+
+Video aspect ratio is locked to prevent distortion.
+
+### getAriaDescriptor()
+
+```typescript
+getAriaDescriptor(shape: TLVideoShape) {
+  return shape.props.altText
+}
+```
+
+Returns alt text for accessibility.
+
+## Indicator
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLVideoShape): Path2D {
+  const path = new Path2D()
+  path.rect(0, 0, shape.props.w, shape.props.h)
+  return path
+}
+```
+
+## Component
+
+The video component handles:
+- Loading states with spinner
+- Broken asset display
+- Autoplay with reduced motion respect
+- Fullscreen detection
+- Control visibility based on zoom level
+
+```typescript
+component(shape: TLVideoShape) {
+  return <VideoShape shape={shape} />
+}
+```
+
+### Video rendering behavior
+
+- **Controls shown when**: Editing AND shape width × zoom >= 110px
+- **Autoplay when**: `autoplay` prop is true AND user hasn't set reduced motion preference
+- **Video attributes**:
+  - `muted` - Always muted (required for autoplay)
+  - `loop` - Continuous playback
+  - `playsInline` - Inline playback on mobile
+  - `disableRemotePlayback` - Prevents casting
+  - `disablePictureInPicture` - Prevents PiP
+
+## Export
+
+### toSvg()
+
+Exports video as a static frame (first frame at time 0):
+
+```typescript
+async toSvg(shape: TLVideoShape, ctx: SvgExportContext) {
+  const props = shape.props
+  if (!props.assetId) return null
+
+  const asset = this.editor.getAsset<TLAsset>(props.assetId)
+  if (!asset) return null
+
+  const src = await videoSvgExportCache.get(asset, async () => {
+    const assetUrl = await ctx.resolveAssetUrl(asset.id, props.w)
+    if (!assetUrl) return null
+    const video = await MediaHelpers.loadVideo(assetUrl)
+    return await MediaHelpers.getVideoFrameAsDataUrl(video, 0)
+  })
+
+  if (!src) return null
+
+  return <image href={src} width={props.w} height={props.h} aria-label={shape.props.altText} />
+}
+```
+
+## Example: Create video shapes
+
+```typescript
+// Create video from file
+const assetId = await editor.createVideoAsset(videoFile)
+editor.createShape({
+  type: 'video',
+  props: {
+    assetId,
+    w: 640,
+    h: 360,
+    autoplay: true,
+    altText: 'Product demo video',
+  }
+})
+
+// Create video without autoplay
+editor.createShape({
+  type: 'video',
+  props: {
+    assetId,
+    w: 400,
+    h: 300,
+    autoplay: false,
+  }
+})
+
+// Create video with hyperlink
+editor.createShape({
+  type: 'video',
+  props: {
+    assetId,
+    w: 800,
+    h: 450,
+    url: 'https://example.com/video-page',
+  }
+})
+```
+
+## Example: Custom configuration
+
+```typescript
+import { VideoShapeUtil } from 'tldraw'
+
+const CustomVideoUtil = VideoShapeUtil.configure({
+  autoplay: false, // Disable autoplay by default
+})
+```
+
+## Example: Control video programmatically
+
+```typescript
+// Start editing to show controls
+editor.setEditingShape(videoShape.id)
+
+// Stop editing to hide controls
+editor.setEditingShape(null)
+
+// Check if video is being edited
+const isEditing = editor.getEditingShapeId() === videoShape.id
+```
+
+## Accessibility
+
+- Uses `altText` prop for `aria-label`
+- Respects `prefers-reduced-motion` for autoplay
+- Provides native video controls when editing
+- Keyboard accessible when controls are shown
+
+## Performance considerations
+
+- Videos are lazy-loaded
+- Only one video element per shape (no duplicate rendering)
+- Hidden video elements have `display: none` until loaded
+- Control visibility tied to zoom level to reduce UI clutter
+- SVG export extracts single frame to avoid large file sizes

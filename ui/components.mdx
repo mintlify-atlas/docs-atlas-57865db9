@@ -1,0 +1,556 @@
+---
+title: Built-in UI components
+description: Reference guide for tldraw's built-in UI components and primitives
+---
+
+The tldraw UI system provides a comprehensive set of components that you can use and customize. These components are organized into high-level UI elements and low-level primitives.
+
+## Available components
+
+You can access and override any of these components through the `components` prop:
+
+```tsx
+import { Tldraw, TLUiComponents } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const components: TLUiComponents = {
+  Toolbar: MyCustomToolbar,
+  StylePanel: MyCustomStylePanel,
+  // ... other components
+}
+
+export default function App() {
+  return <Tldraw components={components} />
+}
+```
+
+## High-level components
+
+### Toolbar
+
+The main toolbar containing drawing tools and shape tools.
+
+```tsx
+import { DefaultToolbar } from 'tldraw'
+
+// Default usage (included automatically)
+<DefaultToolbar />
+
+// With custom orientation
+<DefaultToolbar orientation="vertical" />
+
+// With custom overflow settings
+<DefaultToolbar
+  minItems={4}
+  maxItems={8}
+  minSizePx={310}
+  maxSizePx={470}
+/>
+```
+
+**Props:**
+- `orientation?: 'horizontal' | 'vertical'` - Toolbar orientation (default: horizontal)
+- `minItems?: number` - Minimum visible items before overflow (default: 4)
+- `maxItems?: number` - Maximum visible items (default: 8)
+- `minSizePx?: number` - Minimum size in pixels (default: 310)
+- `maxSizePx?: number` - Maximum size in pixels (default: 470)
+- `children?: ReactNode` - Custom toolbar content
+
+### MainMenu
+
+The main dropdown menu with file operations and settings.
+
+```tsx
+import { DefaultMainMenu } from 'tldraw'
+
+<DefaultMainMenu>
+  {/* Custom menu content */}
+</DefaultMainMenu>
+```
+
+### StylePanel
+
+The panel showing style options for selected shapes.
+
+```tsx
+import { DefaultStylePanel } from 'tldraw'
+
+<DefaultStylePanel />
+
+// Mobile version
+<DefaultStylePanel isMobile />
+
+// With custom styles
+<DefaultStylePanel styles={customStyles} />
+```
+
+**Props:**
+- `isMobile?: boolean` - Use mobile layout
+- `styles?: ReadonlySharedStyleMap | null` - Custom style map
+- `children?: ReactNode` - Custom style panel content
+
+### ContextMenu
+
+The right-click context menu.
+
+```tsx
+import { DefaultContextMenu } from 'tldraw'
+
+<DefaultContextMenu>
+  {/* Custom context menu items */}
+</DefaultContextMenu>
+```
+
+### ActionsMenu
+
+Quick actions menu (undo, redo, etc.).
+
+```tsx
+import { DefaultActionsMenu } from 'tldraw'
+
+<DefaultActionsMenu />
+```
+
+### HelpMenu
+
+Help menu with keyboard shortcuts and documentation links.
+
+```tsx
+import { DefaultHelpMenu } from 'tldraw'
+
+<DefaultHelpMenu />
+```
+
+### ZoomMenu
+
+Zoom controls menu.
+
+```tsx
+import { DefaultZoomMenu } from 'tldraw'
+
+<DefaultZoomMenu />
+```
+
+### PageMenu
+
+Page management menu for multi-page documents.
+
+```tsx
+import { DefaultPageMenu } from 'tldraw'
+
+<DefaultPageMenu />
+```
+
+### NavigationPanel
+
+Zoom controls and page navigation.
+
+```tsx
+import { DefaultNavigationPanel } from 'tldraw'
+
+<DefaultNavigationPanel />
+```
+
+### QuickActions
+
+Quick action buttons (undo, redo, delete, duplicate).
+
+```tsx
+import { DefaultQuickActions } from 'tldraw'
+
+<DefaultQuickActions />
+```
+
+### HelperButtons
+
+Helper buttons for special states (back to content, exit pen mode, stop following).
+
+```tsx
+import { DefaultHelperButtons } from 'tldraw'
+
+<DefaultHelperButtons />
+```
+
+### Minimap
+
+Minimap overview of the canvas.
+
+```tsx
+import { DefaultMinimap } from 'tldraw'
+
+<DefaultMinimap />
+```
+
+### SharePanel
+
+Share and collaboration controls (shown in multiplayer contexts).
+
+```tsx
+import { DefaultSharePanel } from 'tldraw'
+
+<DefaultSharePanel />
+```
+
+## Specialized components
+
+### KeyboardShortcutsDialog
+
+Dialog showing available keyboard shortcuts.
+
+```tsx
+import { DefaultKeyboardShortcutsDialog } from 'tldraw'
+
+<DefaultKeyboardShortcutsDialog />
+```
+
+### Dialogs
+
+Container for all modal dialogs.
+
+```tsx
+import { DefaultDialogs } from 'tldraw'
+
+<DefaultDialogs />
+```
+
+### Toasts
+
+Toast notification system.
+
+```tsx
+import { DefaultToasts } from 'tldraw'
+
+<DefaultToasts />
+```
+
+### DebugPanel
+
+Debug information panel (shown when debug mode is enabled).
+
+```tsx
+import { DefaultDebugPanel } from 'tldraw'
+
+<DefaultDebugPanel />
+```
+
+### DebugMenu
+
+Debug menu with developer tools.
+
+```tsx
+import { DefaultDebugMenu } from 'tldraw'
+
+<DefaultDebugMenu />
+```
+
+## Toolbar-specific components
+
+### RichTextToolbar
+
+Floating toolbar shown when editing text.
+
+```tsx
+import { DefaultRichTextToolbar } from 'tldraw'
+
+<DefaultRichTextToolbar />
+```
+
+### ImageToolbar
+
+Floating toolbar shown when an image is selected.
+
+```tsx
+import { DefaultImageToolbar } from 'tldraw'
+
+<DefaultImageToolbar />
+```
+
+### VideoToolbar
+
+Floating toolbar shown when a video is selected.
+
+```tsx
+import { DefaultVideoToolbar } from 'tldraw'
+
+<DefaultVideoToolbar />
+```
+
+## UI primitives
+
+Low-level components for building custom UI:
+
+### TldrawUiButton
+
+Button component with multiple variants.
+
+```tsx
+import { TldrawUiButton, TldrawUiButtonIcon } from 'tldraw'
+
+// Icon button
+<TldrawUiButton type="icon" title="Click me">
+  <TldrawUiButtonIcon icon="edit" />
+</TldrawUiButton>
+
+// Tool button
+<TldrawUiButton type="tool" isActive={isActive}>
+  <TldrawUiButtonIcon icon="draw" />
+</TldrawUiButton>
+
+// Normal button
+<TldrawUiButton type="normal" onClick={handleClick}>
+  Click me
+</TldrawUiButton>
+
+// Primary button
+<TldrawUiButton type="primary">
+  Save
+</TldrawUiButton>
+
+// Danger button
+<TldrawUiButton type="danger">
+  Delete
+</TldrawUiButton>
+```
+
+**Button types:**
+- `icon` - Icon-only button
+- `tool` - Tool button with active state
+- `normal` - Standard button
+- `primary` - Primary action button
+- `danger` - Destructive action button
+- `low` - Low emphasis button
+- `menu` - Menu button
+- `help` - Help button
+
+### TldrawUiDropdownMenu
+
+Dropdown menu component.
+
+```tsx
+import { TldrawUiDropdownMenu } from 'tldraw'
+
+<TldrawUiDropdownMenu id="my-menu">
+  {/* Menu items */}
+</TldrawUiDropdownMenu>
+```
+
+### TldrawUiInput
+
+Input field component.
+
+```tsx
+import { TldrawUiInput } from 'tldraw'
+
+<TldrawUiInput
+  value={value}
+  onChange={(e) => setValue(e.target.value)}
+  placeholder="Enter text..."
+/>
+```
+
+### TldrawUiSelect
+
+Select dropdown component.
+
+```tsx
+import { TldrawUiSelect } from 'tldraw'
+
+<TldrawUiSelect
+  id="my-select"
+  value={value}
+  options={[
+    { value: 'option1', label: 'Option 1' },
+    { value: 'option2', label: 'Option 2' },
+  ]}
+  onChange={(value) => setValue(value)}
+/>
+```
+
+### TldrawUiSlider
+
+Slider component.
+
+```tsx
+import { TldrawUiSlider } from 'tldraw'
+
+<TldrawUiSlider
+  value={value}
+  onChange={(value) => setValue(value)}
+  min={0}
+  max={100}
+  step={1}
+/>
+```
+
+### TldrawUiIcon
+
+Icon component.
+
+```tsx
+import { TldrawUiIcon } from 'tldraw'
+
+<TldrawUiIcon icon="edit" />
+<TldrawUiIcon icon="trash" small />
+```
+
+### TldrawUiKbd
+
+Keyboard shortcut display component.
+
+```tsx
+import { TldrawUiKbd } from 'tldraw'
+
+<TldrawUiKbd>Ctrl+Z</TldrawUiKbd>
+```
+
+### TldrawUiDialog
+
+Dialog/modal component.
+
+```tsx
+import { TldrawUiDialog } from 'tldraw'
+
+<TldrawUiDialog onClose={handleClose}>
+  {/* Dialog content */}
+</TldrawUiDialog>
+```
+
+### TldrawUiPopover
+
+Popover component.
+
+```tsx
+import { TldrawUiPopover } from 'tldraw'
+
+<TldrawUiPopover id="my-popover">
+  {/* Popover content */}
+</TldrawUiPopover>
+```
+
+## Menu item components
+
+### TldrawUiMenuItem
+
+Basic menu item.
+
+```tsx
+import { TldrawUiMenuItem } from 'tldraw'
+
+<TldrawUiMenuItem
+  id="my-item"
+  label="My Item"
+  icon="edit"
+  onSelect={() => console.log('Selected')}
+/>
+```
+
+### TldrawUiMenuGroup
+
+Menu item group.
+
+```tsx
+import { TldrawUiMenuGroup } from 'tldraw'
+
+<TldrawUiMenuGroup id="my-group">
+  {/* Menu items */}
+</TldrawUiMenuGroup>
+```
+
+### TldrawUiMenuSubmenu
+
+Submenu component.
+
+```tsx
+import { TldrawUiMenuSubmenu } from 'tldraw'
+
+<TldrawUiMenuSubmenu
+  id="my-submenu"
+  label="More options"
+>
+  {/* Submenu items */}
+</TldrawUiMenuSubmenu>
+```
+
+### TldrawUiMenuActionItem
+
+Menu item that triggers an action.
+
+```tsx
+import { TldrawUiMenuActionItem } from 'tldraw'
+
+<TldrawUiMenuActionItem actionId="copy" />
+```
+
+### TldrawUiMenuCheckboxItem
+
+Checkbox menu item.
+
+```tsx
+import { TldrawUiMenuCheckboxItem } from 'tldraw'
+
+<TldrawUiMenuCheckboxItem
+  id="my-checkbox"
+  label="Toggle feature"
+  checked={isEnabled}
+  onSelect={() => setIsEnabled(!isEnabled)}
+/>
+```
+
+## Component composition
+
+You can compose these components to create custom UI:
+
+```tsx
+import {
+  TldrawUiButton,
+  TldrawUiButtonIcon,
+  TldrawUiDropdownMenu,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  useEditor,
+} from 'tldraw'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  
+  return (
+    <div className="my-custom-toolbar">
+      <TldrawUiButton
+        type="tool"
+        onClick={() => editor.setCurrentTool('select')}
+      >
+        <TldrawUiButtonIcon icon="tool-pointer" />
+      </TldrawUiButton>
+      
+      <TldrawUiDropdownMenu id="custom-menu">
+        <TldrawUiMenuGroup id="shapes">
+          <TldrawUiMenuItem
+            id="rectangle"
+            label="Rectangle"
+            icon="geo-rectangle"
+            onSelect={() => editor.setCurrentTool('rectangle')}
+          />
+          <TldrawUiMenuItem
+            id="ellipse"
+            label="Ellipse"
+            icon="geo-ellipse"
+            onSelect={() => editor.setCurrentTool('ellipse')}
+          />
+        </TldrawUiMenuGroup>
+      </TldrawUiDropdownMenu>
+    </div>
+  )
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Customization" icon="paint-brush" href="/ui/customization">
+    Learn how to customize and override UI components
+  </Card>
+  
+  <Card title="Menus and toolbars" icon="wrench" href="/ui/menus-and-toolbars">
+    Deep dive into menus and toolbars
+  </Card>
+</CardGroup>

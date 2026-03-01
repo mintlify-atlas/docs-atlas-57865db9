@@ -1,0 +1,236 @@
+---
+title: StateNode
+description: Base class for all tools and state nodes in tldraw
+---
+
+# StateNode
+
+The `StateNode` class is the base class for all tools and state nodes in tldraw. It provides a hierarchical state machine implementation for managing editor interactions and tool behavior.
+
+## Overview
+
+StateNode implements a tree-based state machine where:
+- **Root nodes** are top-level state containers (like the root tool manager)
+- **Branch nodes** have child states and manage transitions between them
+- **Leaf nodes** are terminal states that handle specific interactions
+
+Each StateNode can handle events (pointer, keyboard, wheel) and transition to other states in response.
+
+## Constructor
+
+```typescript
+constructor(editor: Editor, parent?: StateNode)
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance this state node belongs to
+</ParamField>
+
+<ParamField path="parent" type="StateNode">
+  The parent state node in the hierarchy
+</ParamField>
+
+## Static Properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for this state node
+</ParamField>
+
+<ParamField path="initial" type="string">
+  ID of the initial child state (for branch nodes)
+</ParamField>
+
+<ParamField path="children" type="() => TLStateNodeConstructor[]">
+  Function that returns child state node constructors
+</ParamField>
+
+<ParamField path="isLockable" type="boolean" default="true">
+  Whether this tool can be locked for continuous use
+</ParamField>
+
+<ParamField path="useCoalescedEvents" type="boolean" default="false">
+  Whether to use coalesced pointer events for better performance
+</ParamField>
+
+## Instance Properties
+
+<ParamField path="id" type="string">
+  The unique identifier for this state node instance
+</ParamField>
+
+<ParamField path="type" type="'branch' | 'leaf' | 'root'">
+  The type of state node - determines whether it can have children
+</ParamField>
+
+<ParamField path="editor" type="Editor">
+  Reference to the editor instance
+</ParamField>
+
+<ParamField path="parent" type="StateNode">
+  Reference to the parent state node
+</ParamField>
+
+<ParamField path="isLockable" type="boolean">
+  Whether this tool can be locked
+</ParamField>
+
+## Methods
+
+### getPath()
+
+Returns the full path of active state nodes from this node down through its children.
+
+```typescript
+getPath(): string
+```
+
+**Returns:** A dot-separated path like `"select.idle"` or `"select.translating"`
+
+### getCurrent()
+
+Returns the current active child state node.
+
+```typescript
+getCurrent(): StateNode | undefined
+```
+
+**Returns:** The active child state, or undefined if this is a leaf node
+
+### getIsActive()
+
+Returns whether this state node is currently active.
+
+```typescript
+getIsActive(): boolean
+```
+
+**Returns:** `true` if this state is active in the state tree
+
+### transition()
+
+Transitions to a new child state.
+
+```typescript
+transition(id: string, info?: any): this
+```
+
+<ParamField path="id" type="string" required>
+  The ID of the child state to transition to. Can be a dot-separated path like `"crop.idle"`
+</ParamField>
+
+<ParamField path="info" type="any">
+  Optional data to pass to the `onEnter` and `onExit` handlers
+</ParamField>
+
+**Returns:** The state node instance for chaining
+
+**Example:**
+```typescript
+parentState.transition('childStateA')
+parentState.transition('childStateB', { myData: 4 })
+```
+
+### addChild()
+
+Adds a child state node to this state node.
+
+```typescript
+addChild(childConstructor: TLStateNodeConstructor): this
+```
+
+<ParamField path="childConstructor" type="TLStateNodeConstructor" required>
+  The constructor for the child state node to add
+</ParamField>
+
+**Returns:** The state node instance for chaining
+
+**Throws:** Error if called on a leaf node or if a child with the same ID already exists
+
+### getCurrentToolIdMask()
+
+Gets the current tool ID mask. This is used to display a different tool as active in the UI.
+
+```typescript
+getCurrentToolIdMask(): string | undefined
+```
+
+**Returns:** The masked tool ID, or undefined if no mask is set
+
+### setCurrentToolIdMask()
+
+Sets a tool ID mask to display a different tool as active in the UI.
+
+```typescript
+setCurrentToolIdMask(id: string | undefined): void
+```
+
+<ParamField path="id" type="string | undefined" required>
+  The tool ID to display, or undefined to clear the mask
+</ParamField>
+
+## Event Handlers
+
+All event handlers are optional and can be overridden in subclasses:
+
+### Pointer Events
+
+- `onPointerDown(info: TLPointerEventInfo): void`
+- `onPointerMove(info: TLPointerEventInfo): void`
+- `onPointerUp(info: TLPointerEventInfo): void`
+- `onLongPress(info: TLPointerEventInfo): void`
+
+### Click Events
+
+- `onDoubleClick(info: TLClickEventInfo): void`
+- `onTripleClick(info: TLClickEventInfo): void`
+- `onQuadrupleClick(info: TLClickEventInfo): void`
+- `onRightClick(info: TLPointerEventInfo): void`
+- `onMiddleClick(info: TLPointerEventInfo): void`
+
+### Keyboard Events
+
+- `onKeyDown(info: TLKeyboardEventInfo): void`
+- `onKeyUp(info: TLKeyboardEventInfo): void`
+- `onKeyRepeat(info: TLKeyboardEventInfo): void`
+
+### Other Events
+
+- `onWheel(info: TLWheelEventInfo): void`
+- `onCancel(info: TLCancelEventInfo): void`
+- `onComplete(info: TLCompleteEventInfo): void`
+- `onInterrupt(info: TLInterruptEventInfo): void`
+- `onTick(info: TLTickEventInfo): void`
+
+### Lifecycle Events
+
+- `onEnter(info: any, from: string): void` - Called when entering this state
+- `onExit(info: any, to: string): void` - Called when exiting this state
+
+## Usage Example
+
+```typescript
+import { StateNode, TLStateNodeConstructor } from '@tldraw/editor'
+
+class MyCustomTool extends StateNode {
+  static override id = 'my-custom-tool'
+  static override initial = 'idle'
+  
+  static override children(): TLStateNodeConstructor[] {
+    return [IdleState, ActiveState]
+  }
+  
+  override onEnter() {
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+  }
+  
+  override onPointerDown(info: TLPointerEventInfo) {
+    this.transition('active', { startPoint: info.point })
+  }
+}
+```
+
+## See Also
+
+- [SelectTool](/api/tools/select-tool) - Example of a complex tool with many child states
+- [HandTool](/api/tools/hand-tool) - Example of a simple panning tool
+- [Editor](/api/editor) - The main editor class

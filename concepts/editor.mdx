@@ -1,0 +1,419 @@
+---
+title: Editor
+description: The Editor class is the heart of tldraw, providing the core API for managing canvas state, shapes, tools, and user interactions.
+---
+
+The `Editor` class is the central orchestrator of a tldraw application. It manages the infinite canvas, coordinates shape utilities and tools, handles user input, and provides a comprehensive API for programmatic control.
+
+## Overview
+
+Every tldraw instance is backed by an `Editor` object that:
+
+- Manages the reactive store containing all shapes, pages, and bindings
+- Coordinates ShapeUtils and BindingUtils for shape-specific behavior
+- Implements the state machine for tools and interactions
+- Handles camera transformations and viewport management
+- Provides methods for creating, updating, and deleting shapes
+- Manages undo/redo history through the HistoryManager
+- Emits events for user interactions and state changes
+
+## Creating an editor
+
+The Editor is typically created through the `<Tldraw>` or `<TldrawEditor>` components, but can be instantiated directly:
+
+```tsx
+import { Editor, TLStore, createTLStore } from '@tldraw/editor'
+
+const store = createTLStore({ shapeUtils: [...] })
+
+const editor = new Editor({
+  store,
+  shapeUtils: [GeoShapeUtil, ArrowShapeUtil],
+  bindingUtils: [ArrowBindingUtil],
+  tools: [SelectTool, DrawTool],
+  getContainer: () => document.getElementById('canvas')!,
+  initialState: 'select'
+})
+```
+
+## Core properties
+
+### Store and state
+
+```tsx
+// The reactive store containing all records
+editor.store: TLStore
+
+// History manager for undo/redo
+editor.history: HistoryManager<TLRecord>
+
+// Current camera state
+editor.getCamera(): TLCamera
+
+// Current page
+editor.getCurrentPage(): TLPage
+
+// All shapes on current page
+editor.getCurrentPageShapes(): TLShape[]
+```
+
+### Shape utilities
+
+```tsx
+// Get the utility for a shape type
+const util = editor.getShapeUtil('geo')
+const util = editor.getShapeUtil(shape)
+
+// All registered shape utilities
+editor.shapeUtils: Record<string, ShapeUtil>
+```
+
+### Tool system
+
+```tsx
+// Current active tool
+editor.getCurrentToolId(): string // e.g., 'select', 'draw', 'eraser'
+
+// Root state node containing all tools
+editor.root: RootState
+
+// Set the active tool
+editor.setCurrentTool('select')
+editor.setCurrentTool('geo', { shapeType: 'rectangle' })
+```
+
+## Working with shapes
+
+### Creating shapes
+
+```tsx
+// Create a single shape
+editor.createShape({
+  type: 'geo',
+  x: 100,
+  y: 100,
+  props: {
+    w: 200,
+    h: 100,
+    geo: 'rectangle',
+    color: 'blue'
+  }
+})
+
+// Create multiple shapes
+editor.createShapes([
+  { type: 'geo', x: 0, y: 0, props: { geo: 'ellipse' } },
+  { type: 'text', x: 200, y: 0, props: { text: 'Hello' } }
+])
+```
+
+### Reading shapes
+
+```tsx
+// Get shape by id
+const shape = editor.getShape(shapeId)
+
+// Get multiple shapes
+const shapes = editor.getShapes([id1, id2, id3])
+
+// Get all shapes on current page
+const allShapes = editor.getCurrentPageShapes()
+
+// Get only selected shapes
+const selected = editor.getSelectedShapes()
+```
+
+### Updating shapes
+
+```tsx
+// Update a single shape
+editor.updateShape({
+  id: shapeId,
+  type: 'geo',
+  props: { color: 'red' }
+})
+
+// Update multiple shapes
+editor.updateShapes([
+  { id: shape1.id, type: 'geo', props: { w: 300 } },
+  { id: shape2.id, type: 'geo', props: { h: 200 } }
+])
+
+// Batch updates in a transaction
+editor.run(() => {
+  editor.updateShape({ id: id1, type: 'geo', props: { x: 100 } })
+  editor.updateShape({ id: id2, type: 'geo', props: { x: 200 } })
+}, { history: 'record-preserveRedoStack' })
+```
+
+### Deleting shapes
+
+```tsx
+// Delete shapes by id
+editor.deleteShapes([shapeId1, shapeId2])
+
+// Delete selected shapes
+editor.deleteShapes(editor.getSelectedShapeIds())
+```
+
+## Selection management
+
+```tsx
+// Get selected shape ids
+const ids = editor.getSelectedShapeIds()
+
+// Get selected shapes
+const shapes = editor.getSelectedShapes()
+
+// Set selection
+editor.setSelectedShapes([id1, id2])
+
+// Select all
+editor.selectAll()
+
+// Clear selection
+editor.setSelectedShapes([])
+
+// Select none
+editor.selectNone()
+```
+
+## Camera control
+
+The camera defines what portion of the infinite canvas is visible:
+
+```tsx
+// Get current camera
+const camera = editor.getCamera()
+// { x: number, y: number, z: number (zoom) }
+
+// Set camera position
+editor.setCamera({ x: 0, y: 0, z: 1 })
+
+// Zoom to selection
+editor.zoomToSelection()
+
+// Zoom to fit all shapes
+editor.zoomToFit()
+
+// Zoom in/out
+editor.zoomIn()
+editor.zoomOut()
+
+// Reset zoom
+editor.resetZoom()
+
+// Animate camera movement
+editor.animateCamera({
+  x: 500,
+  y: 500,
+  z: 1.5,
+  animation: { duration: 500, easing: 'easeInOutCubic' }
+})
+```
+
+## Coordinate transformations
+
+Convert between screen, page, and shape coordinate spaces:
+
+```tsx
+// Screen to page coordinates
+const pagePoint = editor.screenToPage({ x: 100, y: 100 })
+
+// Page to screen coordinates
+const screenPoint = editor.pageToScreen({ x: 500, y: 500 })
+
+// Get shape in page space
+const pageTransform = editor.getShapePageTransform(shapeId)
+
+// Point in shape's local coordinates
+const localPoint = editor.getPointInShapeSpace(shape, pagePoint)
+```
+
+## History and transactions
+
+```tsx
+// Undo/redo
+editor.undo()
+editor.redo()
+
+// Check if undo/redo available
+const canUndo = editor.getCanUndo()
+const canRedo = editor.getCanRedo()
+
+// Create a history entry
+editor.mark('before-rotation')
+editor.rotateShapesBy(selectedIds, Math.PI / 4)
+
+// Batch operations
+editor.run(() => {
+  // Multiple operations
+  editor.createShape({ type: 'geo', x: 0, y: 0 })
+  editor.createShape({ type: 'geo', x: 100, y: 100 })
+}, { history: 'record' }) // Single undo entry
+```
+
+## Event handling
+
+The Editor emits events for state changes:
+
+```tsx
+// Listen to events
+editor.on('change', ({ changes }) => {
+  console.log('Store changed:', changes)
+})
+
+editor.on('update', () => {
+  console.log('Editor updated')
+})
+
+editor.on('event', (info) => {
+  console.log('User interaction:', info)
+})
+
+// Remove listener
+const unlisten = editor.on('change', handler)
+unlisten()
+```
+
+## Common operations
+
+### Shape geometry
+
+```tsx
+// Get shape geometry
+const geometry = editor.getShapeGeometry(shape)
+
+// Get shape bounds in page space
+const bounds = editor.getShapePageBounds(shape)
+
+// Check if point is in shape
+const isInside = editor.isPointInShape(
+  shape,
+  { x: 100, y: 100 },
+  { hitInside: true, margin: 0 }
+)
+
+// Get shapes at point
+const shapesAtPoint = editor.getShapesAtPoint({ x: 100, y: 100 })
+```
+
+### Clipboard operations
+
+```tsx
+// Copy selected shapes
+editor.copy()
+
+// Cut selected shapes
+editor.cut()
+
+// Paste from clipboard
+editor.paste()
+
+// Duplicate selected shapes
+editor.duplicateShapes(editor.getSelectedShapes())
+```
+
+### Grouping and ordering
+
+```tsx
+// Group selected shapes
+editor.groupShapes(editor.getSelectedShapeIds())
+
+// Ungroup
+editor.ungroupShapes([groupId])
+
+// Reorder shapes
+editor.sendToBack([shapeId])
+editor.sendBackward([shapeId])
+editor.bringToFront([shapeId])
+editor.bringForward([shapeId])
+```
+
+## Reactivity
+
+The Editor uses reactive signals from `@tldraw/state` for efficient updates:
+
+```tsx
+import { useValue } from '@tldraw/state-react'
+
+function MyComponent() {
+  const editor = useEditor()
+  
+  // Reactively track selected shapes
+  const selectedShapes = useValue(
+    'selected shapes',
+    () => editor.getSelectedShapes(),
+    [editor]
+  )
+  
+  // Reactively track camera
+  const camera = useValue(
+    'camera',
+    () => editor.getCamera(),
+    [editor]
+  )
+  
+  return <div>{selectedShapes.length} shapes selected</div>
+}
+```
+
+## Editor options
+
+Configure editor behavior through options:
+
+```tsx
+const editor = new Editor({
+  store,
+  shapeUtils,
+  bindingUtils,
+  tools,
+  getContainer,
+  
+  // Initial tool
+  initialState: 'select',
+  
+  // Auto-focus on mount
+  autoFocus: true,
+  
+  // Camera constraints
+  cameraOptions: {
+    zoomMin: 0.1,
+    zoomMax: 8,
+    zoomSpeed: 1,
+    isLocked: false
+  },
+  
+  // Text rendering options
+  textOptions: {
+    defaultFontFamily: 'sans-serif',
+    defaultFontSize: 16
+  },
+  
+  // Custom shape visibility
+  getShapeVisibility: (shape) => {
+    return shape.meta.hidden ? 'hidden' : 'inherit'
+  }
+})
+```
+
+## Best practices
+
+<Note>
+**Batch operations**: Use `editor.run()` to batch multiple operations into a single history entry and improve performance.
+</Note>
+
+<Note>
+**Reactivity**: When using the Editor in React components, use `useValue()` or `useEditor()` hooks to properly track reactive state.
+</Note>
+
+<Note>
+**Transactions**: Always use `editor.run()` for operations that should be treated as a single undo/redo action.
+</Note>
+
+## Related
+
+- [Shapes](/concepts/shapes) - Learn about the shape system
+- [Tools](/concepts/tools) - Understand tool implementation
+- [Store](/concepts/store) - Deep dive into the reactive store
+- [Editor API](/api-reference/editor) - Complete API reference

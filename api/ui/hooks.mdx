@@ -1,0 +1,463 @@
+---
+title: UI hooks
+description: React hooks for accessing tldraw UI state and functionality
+---
+
+The tldraw UI provides React hooks for accessing editor state, tools, actions, translations, and more. These hooks allow you to build custom UI components that integrate with the tldraw editor.
+
+## Core hooks
+
+### useTools
+
+Access the available tools in the editor.
+
+```tsx
+import { useTools } from 'tldraw'
+
+function ToolPalette() {
+  const tools = useTools()
+  
+  return (
+    <div>
+      {Object.values(tools).map((tool) => (
+        <button
+          key={tool.id}
+          onClick={() => tool.onSelect('toolbar')}
+        >
+          {tool.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+```
+
+**Returns:** `TLUiToolsContextType` - Record of tool items keyed by tool ID.
+
+### useActions
+
+Access the available actions in the editor.
+
+```tsx
+import { useActions } from 'tldraw'
+
+function ActionButtons() {
+  const actions = useActions()
+  
+  return (
+    <div>
+      <button onClick={() => actions['undo'].onSelect('toolbar')}>
+        Undo
+      </button>
+      <button onClick={() => actions['redo'].onSelect('toolbar')}>
+        Redo
+      </button>
+      <button onClick={() => actions['delete'].onSelect('toolbar')}>
+        Delete
+      </button>
+    </div>
+  )
+}
+```
+
+**Returns:** `TLUiActionsContextType` - Record of action items keyed by action ID.
+
+### useReadonly
+
+Check if the editor is in readonly mode.
+
+```tsx
+import { useReadonly } from 'tldraw'
+
+function EditButton() {
+  const isReadonly = useReadonly()
+  
+  if (isReadonly) {
+    return <div>Editor is readonly</div>
+  }
+  
+  return <button>Edit</button>
+}
+```
+
+**Returns:** `boolean` - True if editor is readonly.
+
+### useBreakpoint
+
+Get the current responsive breakpoint.
+
+```tsx
+import { useBreakpoint } from 'tldraw'
+
+function ResponsiveNav() {
+  const breakpoint = useBreakpoint()
+  const isMobile = breakpoint < 4
+  
+  return isMobile ? <MobileNav /> : <DesktopNav />
+}
+```
+
+**Returns:** `number` - Current breakpoint index.
+
+### useTldrawUiComponents
+
+Access the current UI component overrides.
+
+```tsx
+import { useTldrawUiComponents } from 'tldraw'
+
+function CustomUI() {
+  const components = useTldrawUiComponents()
+  const Toolbar = components.Toolbar
+  
+  return (
+    <div>
+      {Toolbar && <Toolbar />}
+      <div>Custom UI</div>
+    </div>
+  )
+}
+```
+
+**Returns:** `TLUiComponents` - Object containing all UI component overrides.
+
+### useTranslation
+
+Access the translation function for internationalization.
+
+```tsx
+import { useTranslation } from 'tldraw'
+
+function TranslatedButton() {
+  const msg = useTranslation()
+  
+  return <button>{msg('action.undo')}</button>
+}
+```
+
+**Returns:** `(key: TLUiTranslationKey) => string` - Function to translate UI strings.
+
+### useMenuIsOpen
+
+Manage menu open/close state with automatic event tracking.
+
+```tsx
+import { useMenuIsOpen } from 'tldraw'
+
+function CustomMenu() {
+  const [isOpen, onOpenChange] = useMenuIsOpen('custom-menu')
+  
+  return (
+    <div>
+      <button onClick={() => onOpenChange(!isOpen)}>
+        Toggle Menu
+      </button>
+      {isOpen && <div>Menu content</div>}
+    </div>
+  )
+}
+```
+
+**Parameters:**
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the menu.
+</ParamField>
+
+<ParamField path="cb" type="(isOpen: boolean) => void">
+  Optional callback when menu state changes.
+</ParamField>
+
+**Returns:** `[boolean, (isOpen: boolean) => void]` - Current state and setter function.
+
+## Selection hooks
+
+### useAnySelectedShapesCount
+
+Check if the number of selected shapes (locked or unlocked) meets criteria.
+
+```tsx
+import { useAnySelectedShapesCount } from 'tldraw'
+
+function BulkActions() {
+  const hasMultiple = useAnySelectedShapesCount(2) // At least 2
+  const hasSingle = useAnySelectedShapesCount(1, 1) // Exactly 1
+  
+  if (hasMultiple) {
+    return <button>Group</button>
+  }
+  
+  return null
+}
+```
+
+**Parameters:**
+
+<ParamField path="min" type="number">
+  Minimum number of selected shapes.
+</ParamField>
+
+<ParamField path="max" type="number">
+  Maximum number of selected shapes.
+</ParamField>
+
+**Returns:** `boolean | number` - True if criteria met, or count if no criteria provided.
+
+### useUnlockedSelectedShapesCount
+
+Check if the number of unlocked selected shapes meets criteria.
+
+```tsx
+import { useUnlockedSelectedShapesCount } from 'tldraw'
+
+function EditButton() {
+  const hasUnlockedShapes = useUnlockedSelectedShapesCount(1)
+  
+  return (
+    <button disabled={!hasUnlockedShapes}>
+      Edit
+    </button>
+  )
+}
+```
+
+**Parameters:**
+
+<ParamField path="min" type="number">
+  Minimum number of unlocked selected shapes.
+</ParamField>
+
+<ParamField path="max" type="number">
+  Maximum number of unlocked selected shapes.
+</ParamField>
+
+**Returns:** `boolean | number` - True if criteria met, or count if no criteria provided.
+
+### useCanApplySelectionAction
+
+Check if a selection action can be applied (in select tool with shapes selected).
+
+```tsx
+import { useCanApplySelectionAction } from 'tldraw'
+
+function DeleteButton() {
+  const canDelete = useCanApplySelectionAction()
+  
+  return (
+    <button disabled={!canDelete}>
+      Delete
+    </button>
+  )
+}
+```
+
+**Returns:** `boolean` - True if selection actions can be applied.
+
+## History hooks
+
+### useCanUndo
+
+Check if undo is available.
+
+```tsx
+import { useCanUndo } from 'tldraw'
+
+function UndoButton() {
+  const canUndo = useCanUndo()
+  
+  return (
+    <button disabled={!canUndo}>
+      Undo
+    </button>
+  )
+}
+```
+
+**Returns:** `boolean` - True if undo is available.
+
+### useCanRedo
+
+Check if redo is available.
+
+```tsx
+import { useCanRedo } from 'tldraw'
+
+function RedoButton() {
+  const canRedo = useCanRedo()
+  
+  return (
+    <button disabled={!canRedo}>
+      Redo
+    </button>
+  )
+}
+```
+
+**Returns:** `boolean` - True if redo is available.
+
+## Asset hooks
+
+### useAssetUrls
+
+Access URLs for UI assets (icons, fonts, etc.).
+
+```tsx
+import { useAssetUrls } from 'tldraw'
+
+function CustomIcon() {
+  const assetUrls = useAssetUrls()
+  const iconUrl = assetUrls.icons['tool-pencil']
+  
+  return <img src={iconUrl} alt="Pencil" />
+}
+```
+
+**Returns:** `TLUiAssetUrls` - Object containing asset URLs.
+
+## Event hooks
+
+### useUiEvents
+
+Access the UI event tracking function.
+
+```tsx
+import { useUiEvents } from 'tldraw'
+
+function CustomButton() {
+  const trackEvent = useUiEvents()
+  
+  const handleClick = () => {
+    trackEvent('custom-action', { source: 'toolbar' })
+    // Perform action
+  }
+  
+  return <button onClick={handleClick}>Custom</button>
+}
+```
+
+**Returns:** `(name: string, data: object) => void` - Event tracking function.
+
+## Dialog and toast hooks
+
+### useDialogs
+
+Manage dialogs in the UI.
+
+```tsx
+import { useDialogs } from 'tldraw'
+
+function OpenDialogButton() {
+  const { addDialog } = useDialogs()
+  
+  const handleClick = () => {
+    addDialog({
+      component: ({ onClose }) => (
+        <div>
+          <h2>Custom Dialog</h2>
+          <button onClick={onClose}>Close</button>
+        </div>
+      ),
+    })
+  }
+  
+  return <button onClick={handleClick}>Open Dialog</button>
+}
+```
+
+### useToasts
+
+Manage toast notifications.
+
+```tsx
+import { useToasts } from 'tldraw'
+
+function NotifyButton() {
+  const { addToast } = useToasts()
+  
+  const handleClick = () => {
+    addToast({
+      title: 'Success!',
+      description: 'Operation completed',
+      severity: 'success',
+    })
+  }
+  
+  return <button onClick={handleClick}>Notify</button>
+}
+```
+
+## Utility hooks
+
+### useHasShapesOnPage
+
+Check if the current page has any shapes.
+
+```tsx
+import { useHasShapesOnPage } from 'tldraw'
+
+function ExportButton() {
+  const hasShapes = useHasShapesOnPage()
+  
+  return (
+    <button disabled={!hasShapes}>
+      Export
+    </button>
+  )
+}
+```
+
+**Returns:** `boolean` - True if current page has shapes.
+
+## Advanced hooks
+
+### useDefaultHelpers
+
+Access helper functions for common UI operations.
+
+```tsx
+import { useDefaultHelpers } from 'tldraw'
+
+function ExportButton() {
+  const helpers = useDefaultHelpers()
+  
+  const handleExport = () => {
+    const ids = editor.getSelectedShapeIds()
+    helpers.exportAs(ids, { format: 'png' })
+  }
+  
+  return <button onClick={handleExport}>Export PNG</button>
+}
+```
+
+**Returns:** `TLUiOverrideHelpers` - Object containing helper functions.
+
+## Type definitions
+
+### TLUiToolItem
+
+```typescript
+interface TLUiToolItem {
+  id: string
+  label: string
+  icon: string | ReactElement
+  kbd?: string
+  readonlyOk?: boolean
+  onSelect(source: TLUiEventSource): void
+  onDragStart?(source: TLUiEventSource, info: TLPointerEventInfo): void
+  meta?: Record<string, any>
+}
+```
+
+### TLUiActionItem
+
+```typescript
+interface TLUiActionItem {
+  id: string
+  label: string
+  icon?: string | ReactElement
+  kbd?: string
+  readonlyOk?: boolean
+  checkbox?: boolean
+  onSelect(source: TLUiEventSource): Promise<void> | void
+}
+```

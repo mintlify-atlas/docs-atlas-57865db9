@@ -1,0 +1,600 @@
+---
+title: Tools
+description: Tools in tldraw are implemented as state machines using the StateNode class, handling user input and coordinating shape creation and manipulation.
+---
+
+Tools define how users interact with the canvas. Each tool (select, draw, erase, etc.) is implemented as a hierarchical state machine that responds to pointer, keyboard, and other input events.
+
+## Overview
+
+The tool system in tldraw is built on:
+
+- **StateNode**: Base class for all tools and tool states
+- **State hierarchy**: Tools can have child states (e.g., Select tool has Idle, Pointing, Dragging, etc.)
+- **Event handlers**: Methods for pointer, keyboard, and other events
+- **Transitions**: Moving between states based on user input
+
+## StateNode architecture
+
+Every tool extends the `StateNode` class:
+
+```tsx
+import { StateNode, TLStateNodeConstructor } from '@tldraw/editor'
+
+export class MyTool extends StateNode {
+  static override id = 'my-tool'
+  static override initial = 'idle'
+  static override children(): TLStateNodeConstructor[] {
+    return [Idle, Pointing, Dragging]
+  }
+  
+  onEnter() {
+    // Called when tool becomes active
+    this.editor.setCursor({ type: 'cross' })
+  }
+  
+  onExit() {
+    // Called when tool becomes inactive
+  }
+}
+```
+
+### State hierarchy
+
+Tools are organized as trees of states:
+
+```
+root
+├── select (branch)
+│   ├── idle (leaf)
+│   ├── pointing (leaf)
+│   ├── brushing (leaf)
+│   ├── translating (leaf)
+│   └── rotating (leaf)
+├── draw (branch)
+│   ├── idle (leaf)
+│   └── drawing (leaf)
+└── eraser (branch)
+    ├── idle (leaf)
+    ├── pointing (leaf)
+    └── erasing (leaf)
+```
+
+## Creating a simple tool
+
+Here's a complete example of a custom tool:
+
+<Steps>
+
+### Define the tool class
+
+```tsx
+import { StateNode, TLStateNodeConstructor } from '@tldraw/editor'
+import { Idle } from './Idle'
+import { Drawing } from './Drawing'
+
+export class StampTool extends StateNode {
+  static override id = 'stamp'
+  static override initial = 'idle'
+  static override children(): TLStateNodeConstructor[] {
+    return [Idle, Drawing]
+  }
+  
+  override onEnter() {
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+  }
+  
+  override onExit() {
+    this.editor.setCursor({ type: 'default' })
+  }
+}
+```
+
+### Create child states
+
+**Idle state** (waiting for input):
+
+```tsx
+import { StateNode, TLPointerEventInfo } from '@tldraw/editor'
+
+export class Idle extends StateNode {
+  static override id = 'idle'
+  
+  override onPointerDown(info: TLPointerEventInfo) {
+    // Transition to drawing state
+    this.parent.transition('drawing', info)
+  }
+  
+  override onKeyDown(info: TLKeyboardEventInfo) {
+    if (info.key === 'Escape') {
+      // Return to select tool
+      this.editor.setCurrentTool('select')
+    }
+  }
+}
+```
+
+**Drawing state** (actively creating shape):
+
+```tsx
+import { StateNode, TLPointerEventInfo, createShapeId } from '@tldraw/editor'
+
+export class Drawing extends StateNode {
+  static override id = 'drawing'
+  
+  private shapeId = createShapeId()
+  
+  override onEnter(info: TLPointerEventInfo) {
+    const { currentPagePoint } = info
+    
+    // Create the shape
+    this.editor.createShape({
+      id: this.shapeId,
+      type: 'stamp',
+      x: currentPagePoint.x - 50,
+      y: currentPagePoint.y - 50,
+      props: {
+        w: 100,
+        h: 100
+      }
+    })
+  }
+  
+  override onPointerMove(info: TLPointerEventInfo) {
+    // Update shape as pointer moves
+    const { currentPagePoint } = info
+    
+    this.editor.updateShape({
+      id: this.shapeId,
+      type: 'stamp',
+      x: currentPagePoint.x - 50,
+      y: currentPagePoint.y - 50
+    })
+  }
+  
+  override onPointerUp() {
+    // Finish drawing, return to idle
+    this.parent.transition('idle')
+  }
+  
+  override onCancel() {
+    // Delete shape and return to idle
+    this.editor.deleteShapes([this.shapeId])
+    this.parent.transition('idle')
+  }
+}
+```
+
+### Register the tool
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { StampTool } from './StampTool'
+import { StampShapeUtil } from './StampShapeUtil'
+
+function App() {
+  return (
+    <Tldraw
+      shapeUtils={[StampShapeUtil]}
+      tools={[StampTool]}
+      onMount={(editor) => {
+        // Activate the tool
+        editor.setCurrentTool('stamp')
+      }}
+    />
+  )
+}
+```
+
+</Steps>
+
+## Event handlers
+
+StateNode provides handlers for various input events:
+
+### Pointer events
+
+```tsx
+class MyState extends StateNode {
+  override onPointerDown(info: TLPointerEventInfo) {
+    const { currentPagePoint, button, altKey, ctrlKey, shiftKey } = info
+    
+    if (button === 0) { // Left click
+      // Handle left click
+    }
+  }
+  
+  override onPointerMove(info: TLPointerEventInfo) {
+    // Handle pointer movement
+  }
+  
+  override onPointerUp(info: TLPointerEventInfo) {
+    // Handle pointer release
+  }
+  
+  override onDoubleClick(info: TLClickEventInfo) {
+    // Handle double-click
+  }
+  
+  override onTripleClick(info: TLClickEventInfo) {
+    // Handle triple-click
+  }
+}
+```
+
+### Keyboard events
+
+```tsx
+class MyState extends StateNode {
+  override onKeyDown(info: TLKeyboardEventInfo) {
+    switch (info.key) {
+      case 'Escape':
+        this.editor.setCurrentTool('select')
+        break
+      case 'Enter':
+        this.complete()
+        break
+      case 'z':
+        if (info.ctrlKey) this.editor.undo()
+        break
+    }
+  }
+  
+  override onKeyUp(info: TLKeyboardEventInfo) {
+    // Handle key release
+  }
+  
+  override onKeyRepeat(info: TLKeyboardEventInfo) {
+    // Handle key held down
+  }
+}
+```
+
+### Other events
+
+```tsx
+class MyState extends StateNode {
+  // Mouse wheel
+  override onWheel(info: TLWheelEventInfo) {
+    // Handle scroll
+  }
+  
+  // Animation frame
+  override onTick(elapsed: number) {
+    // Called every frame while active
+  }
+  
+  // State transitions
+  override onInterrupt() {
+    // Called when state is interrupted
+  }
+  
+  override onCancel() {
+    // Called when user cancels (ESC, etc.)
+  }
+  
+  override onComplete() {
+    // Called when action completes
+  }
+}
+```
+
+## State transitions
+
+Navigate between states using `transition()`:
+
+```tsx
+class Idle extends StateNode {
+  static override id = 'idle'
+  
+  override onPointerDown(info: TLPointerEventInfo) {
+    // Transition to sibling state
+    this.parent.transition('pointing', info)
+  }
+}
+
+class Pointing extends StateNode {
+  static override id = 'pointing'
+  
+  override onPointerMove(info: TLPointerEventInfo) {
+    const { originPagePoint, currentPagePoint } = info
+    const distance = Vec.dist(originPagePoint, currentPagePoint)
+    
+    if (distance > 10) {
+      // Transition to another sibling state
+      this.parent.transition('dragging', info)
+    }
+  }
+  
+  override onPointerUp() {
+    // Return to idle
+    this.parent.transition('idle')
+  }
+}
+```
+
+## Real-world example: Eraser tool
+
+The built-in eraser tool demonstrates the pattern:
+
+```tsx
+import { StateNode, TLStateNodeConstructor } from '@tldraw/editor'
+import { Erasing } from './childStates/Erasing'
+import { Idle } from './childStates/Idle'
+import { Pointing } from './childStates/Pointing'
+
+export class EraserTool extends StateNode {
+  static override id = 'eraser'
+  static override initial = 'idle'
+  static override isLockable = false
+  
+  static override children(): TLStateNodeConstructor[] {
+    return [Idle, Pointing, Erasing]
+  }
+  
+  override onEnter() {
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+  }
+}
+```
+
+Its child states:
+
+```tsx
+// Idle.ts
+export class Idle extends StateNode {
+  static override id = 'idle'
+  
+  override onPointerDown() {
+    this.parent.transition('pointing')
+  }
+  
+  override onCancel() {
+    this.editor.setCurrentTool('select')
+  }
+}
+
+// Pointing.ts
+export class Pointing extends StateNode {
+  static override id = 'pointing'
+  
+  override onPointerMove(info: TLPointerEventInfo) {
+    if (this.editor.inputs.isDragging) {
+      this.parent.transition('erasing', info)
+    }
+  }
+  
+  override onPointerUp() {
+    this.parent.transition('idle')
+  }
+}
+
+// Erasing.ts
+export class Erasing extends StateNode {
+  static override id = 'erasing'
+  private shapesToErase = new Set<TLShapeId>()
+  
+  override onEnter() {
+    this.updateErasingShapes()
+  }
+  
+  override onPointerMove() {
+    this.updateErasingShapes()
+  }
+  
+  override onPointerUp() {
+    this.editor.deleteShapes(Array.from(this.shapesToErase))
+    this.parent.transition('idle')
+  }
+  
+  private updateErasingShapes() {
+    const { currentScreenPoint } = this.editor.inputs
+    const erasing = this.editor.getShapesAtPoint(currentScreenPoint)
+    
+    for (const shape of erasing) {
+      this.shapesToErase.add(shape.id)
+    }
+    
+    this.editor.setErasingShapes(Array.from(this.shapesToErase))
+  }
+}
+```
+
+## BaseBoxShapeTool
+
+For tools that create rectangular shapes, extend `BaseBoxShapeTool`:
+
+```tsx
+import { BaseBoxShapeTool } from '@tldraw/editor'
+
+export class CardTool extends BaseBoxShapeTool {
+  static override id = 'card'
+  static override initial = 'idle'
+  override shapeType = 'card'
+}
+```
+
+This provides built-in states for:
+- Idle: Waiting for input
+- Pointing: Mouse down but not dragging yet
+- Creating: Dragging to define shape size
+
+## Advanced patterns
+
+### Accessing parent tool
+
+```tsx
+class ChildState extends StateNode {
+  override onComplete() {
+    // Access parent tool
+    const tool = this.parent as MyTool
+    tool.someToolMethod()
+    
+    // Transition in parent
+    this.parent.transition('idle')
+  }
+}
+```
+
+### Sharing data between states
+
+```tsx
+export class DrawTool extends StateNode {
+  static override id = 'draw'
+  
+  // Shared data accessible to child states
+  currentShapeId?: TLShapeId
+  initialPoint?: VecLike
+  
+  setCurrentShape(id: TLShapeId) {
+    this.currentShapeId = id
+  }
+}
+
+class Drawing extends StateNode {
+  override onEnter() {
+    const tool = this.parent as DrawTool
+    tool.setCurrentShape(newShapeId)
+  }
+}
+```
+
+### Using tick for animations
+
+```tsx
+class Animating extends StateNode {
+  private startTime = Date.now()
+  
+  override onTick() {
+    const elapsed = Date.now() - this.startTime
+    const progress = Math.min(elapsed / 1000, 1)
+    
+    // Update shape based on progress
+    this.editor.updateShape({
+      id: this.shapeId,
+      type: 'animated',
+      props: { progress }
+    })
+    
+    if (progress >= 1) {
+      this.complete()
+    }
+  }
+}
+```
+
+### Handling interruptions
+
+```tsx
+class Drawing extends StateNode {
+  private shapeId: TLShapeId
+  
+  override onInterrupt() {
+    // Clean up when interrupted by another tool
+    this.editor.deleteShapes([this.shapeId])
+  }
+  
+  override onCancel() {
+    // User pressed ESC
+    this.editor.deleteShapes([this.shapeId])
+    this.parent.transition('idle')
+  }
+}
+```
+
+## Tool configuration
+
+### Tool options
+
+```tsx
+export class MyTool extends StateNode {
+  static override id = 'my-tool'
+  static override initial = 'idle'
+  
+  // Prevent locking when tool is active
+  static override isLockable = false
+  
+  // Use coalesced events for better performance
+  static override useCoalescedEvents = true
+}
+```
+
+### Dynamic tool behavior
+
+```tsx
+class Pointing extends StateNode {
+  override onPointerMove(info: TLPointerEventInfo) {
+    // Check modifier keys
+    if (info.shiftKey) {
+      // Constrain to axis
+      this.constrainToAxis()
+    }
+    
+    if (info.altKey) {
+      // Draw from center
+      this.drawFromCenter()
+    }
+    
+    if (info.ctrlKey) {
+      // Snap to grid
+      this.snapToGrid()
+    }
+  }
+}
+```
+
+## Testing tools
+
+```tsx
+import { TestEditor } from '@tldraw/editor'
+import { MyTool } from './MyTool'
+
+describe('MyTool', () => {
+  let editor: TestEditor
+  
+  beforeEach(() => {
+    editor = new TestEditor()
+    editor.registerTool(MyTool)
+  })
+  
+  it('creates shape on click', () => {
+    editor.setCurrentTool('my-tool')
+    editor.pointerDown(100, 100)
+    editor.pointerUp(100, 100)
+    
+    expect(editor.getCurrentPageShapes()).toHaveLength(1)
+  })
+  
+  it('cancels on escape', () => {
+    editor.setCurrentTool('my-tool')
+    editor.pointerDown(100, 100)
+    editor.keyDown('Escape')
+    
+    expect(editor.getCurrentToolId()).toBe('select')
+  })
+})
+```
+
+## Best practices
+
+<Note>
+**Keep states focused**: Each state should have a single, clear responsibility. Use multiple states for complex interactions.
+</Note>
+
+<Note>
+**Handle cancellation**: Always implement `onCancel()` and `onInterrupt()` to clean up when the tool is interrupted.
+</Note>
+
+<Info>
+**Use transactions**: Wrap shape operations in `editor.run()` to create proper undo/redo entries.
+</Info>
+
+<Note>
+**Cursor feedback**: Update the cursor in `onEnter()` to give users visual feedback about the active tool.
+</Note>
+
+## Related
+
+- [Shapes](/concepts/shapes) - Creating shapes that tools interact with
+- [Editor](/concepts/editor) - Using the Editor API in tools
+- [StateNode API](/api-reference/state-node) - Complete StateNode reference

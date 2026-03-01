@@ -1,0 +1,271 @@
+---
+title: Custom tool
+description: Build custom tools by extending StateNode
+---
+
+Tools in tldraw are nodes in the editor's state machine. You can create custom tools by extending the `StateNode` class and overriding its methods.
+
+## Simple custom tool
+
+```tsx CustomToolExample.tsx
+import { StateNode, Tldraw, toRichText } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const OFFSET = 12
+
+// [1] Create the tool class
+class StickerTool extends StateNode {
+  static override id = 'sticker'
+
+  // Called when tool is activated
+  override onEnter() {
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+  }
+
+  // Called when user clicks
+  override onPointerDown() {
+    const currentPagePoint = this.editor.inputs.getCurrentPagePoint()
+    this.editor.createShape({
+      type: 'text',
+      x: currentPagePoint.x - OFFSET,
+      y: currentPagePoint.y - OFFSET,
+      props: { richText: toRichText('❤️') },
+    })
+  }
+}
+
+// [2] Pass to Tldraw component
+const customTools = [StickerTool]
+
+export default function CustomToolExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw
+        tools={customTools}
+        initialState="sticker"
+        hideUi
+        onMount={(editor) => {
+          editor.createShape({
+            type: 'text',
+            x: 100,
+            y: 100,
+            props: { richText: toRichText('Click anywhere to add a sticker') },
+          })
+        }}
+      />
+    </div>
+  )
+}
+```
+
+## Tool lifecycle methods
+
+### onEnter / onExit
+
+Called when the tool becomes active or inactive:
+
+```tsx
+class MyTool extends StateNode {
+  static override id = 'my-tool'
+
+  override onEnter() {
+    // Set cursor, prepare state, etc.
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+  }
+
+  override onExit() {
+    // Clean up
+    this.editor.setCursor({ type: 'default', rotation: 0 })
+  }
+}
+```
+
+### Pointer events
+
+```tsx
+class DrawingTool extends StateNode {
+  static override id = 'drawing-tool'
+
+  override onPointerDown() {
+    const point = this.editor.inputs.getCurrentPagePoint()
+    // Start drawing
+  }
+
+  override onPointerMove() {
+    const point = this.editor.inputs.getCurrentPagePoint()
+    // Update drawing
+  }
+
+  override onPointerUp() {
+    // Finish drawing
+  }
+}
+```
+
+### Keyboard events
+
+```tsx
+class MyTool extends StateNode {
+  static override id = 'my-tool'
+
+  override onKeyDown(info) {
+    if (info.key === 'Escape') {
+      this.editor.setCurrentTool('select')
+    }
+  }
+
+  override onKeyUp(info) {
+    // Handle key release
+  }
+}
+```
+
+## Tools with child states
+
+Complex tools can have child states for different interaction phases:
+
+```tsx
+import { StateNode, TLStateNodeConstructor } from 'tldraw'
+
+class IdleState extends StateNode {
+  static override id = 'idle'
+
+  override onPointerDown() {
+    this.parent.transition('drawing')
+  }
+}
+
+class DrawingState extends StateNode {
+  static override id = 'drawing'
+
+  override onPointerMove() {
+    // Update shape while drawing
+  }
+
+  override onPointerUp() {
+    this.parent.transition('idle')
+  }
+}
+
+class ComplexTool extends StateNode {
+  static override id = 'complex-tool'
+  static override initial = 'idle'
+  static override children = (): TLStateNodeConstructor[] => [
+    IdleState,
+    DrawingState,
+  ]
+}
+```
+
+## Accessing editor
+
+Inside your tool, access the editor instance with `this.editor`:
+
+```tsx
+class MyTool extends StateNode {
+  static override id = 'my-tool'
+
+  override onPointerDown() {
+    // Create shapes
+    this.editor.createShape({ type: 'geo', x: 0, y: 0 })
+
+    // Get input position
+    const point = this.editor.inputs.getCurrentPagePoint()
+
+    // Set cursor
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+
+    // Switch tools
+    this.editor.setCurrentTool('select')
+  }
+}
+```
+
+## Adding tool to toolbar
+
+To add your custom tool to the toolbar, you'll need to customize the UI:
+
+```tsx
+import { Tldraw, useEditor, TldrawUiMenuItem, useTools } from 'tldraw'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  const tools = useTools()
+
+  return (
+    <div className="custom-toolbar">
+      <button onClick={() => editor.setCurrentTool('sticker')}>
+        Add Sticker
+      </button>
+    </div>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw tools={[StickerTool]}>
+        <CustomToolbar />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Available event handlers
+
+<CodeGroup>
+
+```tsx Pointer events
+onPointerDown(info: TLPointerEventInfo)
+onPointerMove(info: TLPointerEventInfo)
+onPointerUp(info: TLPointerEventInfo)
+onPointerEnter(info: TLPointerEventInfo)
+onPointerLeave(info: TLPointerEventInfo)
+```
+
+```tsx Keyboard events
+onKeyDown(info: TLKeyboardEventInfo)
+onKeyUp(info: TLKeyboardEventInfo)
+onKeyRepeat(info: TLKeyboardEventInfo)
+```
+
+```tsx Lifecycle
+onEnter(info: any)
+onExit(info: any)
+onTick(elapsed: number)
+```
+
+```tsx Other events
+onDoubleClick(info: TLClickEventInfo)
+onTripleClick(info: TLClickEventInfo)
+onQuadrupleClick(info: TLClickEventInfo)
+onWheel(info: TLWheelEventInfo)
+onCancel()
+onComplete()
+onInterrupt()
+```
+
+</CodeGroup>
+
+## Transitions
+
+Switch between tools or states using transitions:
+
+```tsx
+// Switch to a different tool
+this.editor.setCurrentTool('select')
+
+// Transition to child state (if tool has children)
+this.parent.transition('drawing')
+```
+
+<Note>
+Tools are implemented as state machines using the `StateNode` class. This provides a robust framework for handling complex interactions and tool states.
+</Note>
+
+## Related
+
+- [Custom shape](/examples/custom-shape) - Create shapes for your tools
+- [Custom UI](/examples/custom-ui) - Build custom toolbar
+- [StateNode reference](/reference/editor/StateNode)

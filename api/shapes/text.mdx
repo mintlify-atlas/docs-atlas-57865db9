@@ -1,0 +1,355 @@
+---
+title: TextShapeUtil
+description: Shape utility for standalone text shapes with auto-sizing
+---
+
+`TextShapeUtil` handles standalone text shapes that can auto-size or be manually resized, with support for rich text formatting and text alignment.
+
+## Type signature
+
+```typescript
+class TextShapeUtil extends ShapeUtil<TLTextShape>
+```
+
+## Features
+
+- Rich text editing with formatting
+- Auto-sizing or fixed-width text
+- Text alignment options
+- Configurable fonts and sizes
+- Scale support
+- Text outline for better visibility
+
+## Configuration options
+
+```typescript
+interface TextShapeOptions {
+  /**
+   * How much additional padding should be added to the horizontal geometry
+   * when binding to an arrow?
+   */
+  extraArrowHorizontalPadding: number // default: 10
+  
+  /**
+   * Whether to show the outline of the text shape.
+   * This helps with overlapping shapes. Does not show on Safari (performance).
+   */
+  showTextOutline: boolean // default: true
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLTextShape['props'] {
+  return {
+    color: 'black',
+    size: 'm',
+    w: 8,
+    font: 'draw',
+    textAlign: 'start',
+    autoSize: true,
+    scale: 1,
+    richText: toRichText(''),
+  }
+}
+```
+
+## Properties
+
+<ParamField path="richText" type="TLRichText" required>
+  Rich text content with formatting.
+</ParamField>
+
+<ParamField path="color" type="TLColorStyle" default="'black'">
+  Text color.
+</ParamField>
+
+<ParamField path="size" type="'s' | 'm' | 'l' | 'xl'" default="'m'">
+  Font size.
+</ParamField>
+
+<ParamField path="font" type="TLFontStyle" default="'draw'">
+  Font family: `'draw'`, `'sans'`, `'serif'`, or `'mono'`.
+</ParamField>
+
+<ParamField path="textAlign" type="'start' | 'middle' | 'end'" default="'start'">
+  Horizontal text alignment.
+</ParamField>
+
+<ParamField path="w" type="number" required>
+  Width of the text box (only used when autoSize is false).
+</ParamField>
+
+<ParamField path="autoSize" type="boolean" default="true">
+  Whether the text shape automatically sizes to fit content.
+</ParamField>
+
+<ParamField path="scale" type="number" default="1">
+  Scale factor applied to the text.
+</ParamField>
+
+## Geometry
+
+Text shapes have rectangular geometry that adapts to arrow bindings:
+
+```typescript
+getGeometry(shape: TLTextShape, opts: TLGeometryOpts) {
+  const { scale } = shape.props
+  const { width, height } = this.getMinDimensions(shape)!
+  const context = opts?.context ?? 'none'
+  
+  return new Rectangle2d({
+    x: (context === '@tldraw/arrow-without-arrowhead'
+      ? -this.options.extraArrowHorizontalPadding
+      : 0) * scale,
+    width: (width + (context === '@tldraw/arrow-without-arrowhead'
+      ? this.options.extraArrowHorizontalPadding * 2
+      : 0)) * scale,
+    height: height * scale,
+    isFilled: true,
+    isLabel: true,
+  })
+}
+```
+
+## Methods
+
+### canEdit()
+
+```typescript
+canEdit() {
+  return true
+}
+```
+
+Text shapes can be double-clicked to edit.
+
+### isAspectRatioLocked()
+
+```typescript
+isAspectRatioLocked() {
+  return true
+}
+```
+
+Aspect ratio is locked to prevent distortion during resize.
+
+### getMinDimensions()
+
+Returns the minimum dimensions based on text content:
+
+```typescript
+getMinDimensions(shape: TLTextShape) {
+  return sizeCache.get(this.editor, shape.id)!
+}
+```
+
+The size is cached and automatically updated when text or style changes.
+
+### getText()
+
+Returns plaintext version for search and accessibility:
+
+```typescript
+getText(shape: TLTextShape) {
+  return renderPlaintextFromRichText(this.editor, shape.props.richText)
+}
+```
+
+### onResize()
+
+Handles two resize modes:
+
+```typescript
+onResize(shape: TLTextShape, info: TLResizeInfo<TLTextShape>) {
+  const { newPoint, initialBounds, initialShape, scaleX, handle } = info
+
+  // Scale mode: resize the whole shape including text
+  if (info.mode === 'scale_shape' || (handle !== 'right' && handle !== 'left')) {
+    return {
+      id: shape.id,
+      type: shape.type,
+      ...resizeScaled(shape, info),
+    }
+  }
+  
+  // Width mode: change text box width (left/right handles)
+  else {
+    const nextWidth = Math.max(1, Math.abs(initialBounds.width * scaleX))
+    const { x, y } = scaleX < 0
+      ? Vec.Sub(newPoint, Vec.FromAngle(shape.rotation).mul(nextWidth))
+      : newPoint
+
+    return {
+      id: shape.id,
+      type: shape.type,
+      x,
+      y,
+      props: {
+        w: nextWidth / initialShape.props.scale,
+        autoSize: false,
+      },
+    }
+  }
+}
+```
+
+### onBeforeUpdate()
+
+Adjusts position when text content changes in auto-size mode:
+
+```typescript
+onBeforeUpdate(prev: TLTextShape, next: TLTextShape) {
+  if (!next.props.autoSize) return
+
+  const styleDidChange = /* ... check if style changed ... */
+  const textDidChange = !isEqual(prev.props.richText, next.props.richText)
+
+  if (!styleDidChange && !textDidChange) return
+
+  const boundsA = this.getMinDimensions(prev)
+  const boundsB = getTextSize(this.editor, next.props)
+
+  // Calculate delta based on text alignment
+  let delta: Vec | undefined
+  switch (next.props.textAlign) {
+    case 'middle':
+      delta = new Vec((wB - wA) / 2, textDidChange ? 0 : (hB - hA) / 2)
+      break
+    case 'end':
+      delta = new Vec(wB - wA, textDidChange ? 0 : (hB - hA) / 2)
+      break
+    default:
+      if (textDidChange) break
+      delta = new Vec(0, (hB - hA) / 2)
+  }
+
+  if (delta) {
+    delta.rot(next.rotation)
+    return {
+      ...next,
+      x: x - delta.x,
+      y: y - delta.y,
+      props: { ...next.props, w: wB },
+    }
+  }
+}
+```
+
+### onEditEnd()
+
+Deletes the shape if text is empty:
+
+```typescript
+onEditEnd(shape: TLTextShape) {
+  const trimmedText = renderPlaintextFromRichText(this.editor, shape.props.richText).trimEnd()
+  
+  if (trimmedText.length === 0) {
+    this.editor.deleteShapes([shape.id])
+  }
+}
+```
+
+## Indicator
+
+Hides indicator when auto-sizing and editing:
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLTextShape): Path2D | undefined {
+  if (shape.props.autoSize && this.editor.getEditingShapeId() === shape.id) {
+    return undefined
+  }
+  const bounds = this.editor.getShapeGeometry(shape).bounds
+  const path = new Path2D()
+  path.rect(0, 0, bounds.width, bounds.height)
+  return path
+}
+```
+
+## Export
+
+### toSvg()
+
+Exports text as SVG with proper scaling:
+
+```typescript
+toSvg(shape: TLTextShape, ctx: SvgExportContext) {
+  const bounds = this.editor.getShapeGeometry(shape).bounds
+  const width = bounds.width / (shape.props.scale ?? 1)
+  const height = bounds.height / (shape.props.scale ?? 1)
+  const theme = getDefaultColorTheme(ctx)
+
+  const exportBounds = new Box(0, 0, width, height)
+  return (
+    <RichTextSVG
+      fontSize={FONT_SIZES[shape.props.size]}
+      font={shape.props.font}
+      align={shape.props.textAlign}
+      verticalAlign="middle"
+      richText={shape.props.richText}
+      labelColor={getColorValue(theme, shape.props.color, 'solid')}
+      bounds={exportBounds}
+      padding={0}
+      showTextOutline={this.options.showTextOutline}
+    />
+  )
+}
+```
+
+## Example: Create text shapes
+
+```typescript
+// Auto-sizing text
+editor.createShape({
+  type: 'text',
+  props: {
+    richText: toRichText('Hello, world!'),
+    color: 'blue',
+    size: 'l',
+  }
+})
+
+// Fixed-width text box
+editor.createShape({
+  type: 'text',
+  props: {
+    richText: toRichText('This text will wrap at the specified width.'),
+    w: 200,
+    autoSize: false,
+    textAlign: 'middle',
+  }
+})
+
+// Scaled text
+editor.createShape({
+  type: 'text',
+  props: {
+    richText: toRichText('Large text'),
+    scale: 2,
+    font: 'sans',
+  }
+})
+```
+
+## Example: Custom configuration
+
+```typescript
+import { TextShapeUtil } from 'tldraw'
+
+const CustomTextUtil = TextShapeUtil.configure({
+  showTextOutline: false,
+  extraArrowHorizontalPadding: 20,
+})
+```
+
+## Keyboard shortcuts
+
+When editing text:
+- **Ctrl/Cmd + Enter** - Complete editing
+- **Escape** - Cancel editing (deletes if empty)
+- **Tab** - Insert tab (if supported by container)

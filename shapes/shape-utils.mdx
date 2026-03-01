@@ -1,0 +1,552 @@
+---
+title: ShapeUtil API and lifecycle
+description: Complete reference for ShapeUtil methods, lifecycle hooks, and shape behavior configuration
+---
+
+The `ShapeUtil` class is the foundation of tldraw's shape system. Every shape type has a corresponding ShapeUtil that defines how it behaves, renders, and responds to user interactions.
+
+## Class definition
+
+```typescript
+export abstract class ShapeUtil<Shape extends TLShape = TLShape> {
+  constructor(public editor: Editor) {}
+  
+  // Static properties
+  static type: string
+  static props?: RecordProps<TLUnknownShape>
+  static migrations?: MigrationSequence
+  
+  // Required abstract methods
+  abstract getDefaultProps(): Shape['props']
+  abstract getGeometry(shape: Shape): Geometry2d
+  abstract component(shape: Shape): any
+  abstract indicator(shape: Shape): any
+}
+```
+
+## Required methods
+
+Every ShapeUtil must implement these four methods:
+
+### getDefaultProps
+
+Returns the default properties when creating a new shape.
+
+<ParamField path="returns" type="Shape['props']" required>
+  Default property values for the shape
+</ParamField>
+
+```typescript
+getDefaultProps(): TLGeoShape['props'] {
+  return {
+    w: 100,
+    h: 100,
+    geo: 'rectangle',
+    dash: 'draw',
+    growY: 0,
+    url: '',
+    scale: 1,
+    color: 'black',
+    labelColor: 'black',
+    fill: 'none',
+    size: 'm',
+    font: 'draw',
+    align: 'middle',
+    verticalAlign: 'middle',
+    richText: toRichText(''),
+  }
+}
+```
+
+### getGeometry
+
+Defines the shape's geometric representation for hit testing, bounds calculation, and snapping.
+
+<ParamField path="shape" type="Shape" required>
+  The shape to calculate geometry for
+</ParamField>
+
+<ParamField path="opts" type="TLGeometryOpts">
+  Additional options, including context information
+</ParamField>
+
+<ParamField path="returns" type="Geometry2d" required>
+  A Geometry2d primitive (Rectangle2d, Polygon2d, etc.)
+</ParamField>
+
+```typescript
+getGeometry(shape: TLGeoShape) {
+  const { props } = shape
+  const path = getGeoShapePath(shape)
+  const pathGeometry = path.toGeometry()
+  
+  const labelBounds = getLabelBounds(
+    props.w / props.scale,
+    (props.h + props.growY) / props.scale,
+    labelSize,
+    props.size,
+    props.align,
+    props.verticalAlign,
+    props.scale
+  )
+  
+  return new Group2d({
+    children: [
+      pathGeometry,
+      new Rectangle2d({
+        ...labelBounds,
+        isFilled: true,
+        isLabel: true,
+      }),
+    ],
+  })
+}
+```
+
+<Note>
+  The geometry is cached and only recalculated when the shape changes. This is critical for performance.
+</Note>
+
+### component
+
+Returns a React component to render the shape's visual appearance.
+
+<ParamField path="shape" type="Shape" required>
+  The shape to render
+</ParamField>
+
+<ParamField path="returns" type="React.ReactElement" required>
+  React component representing the shape
+</ParamField>
+
+```typescript
+component(shape: TLGeoShape) {
+  const { id, type, props } = shape
+  const theme = useDefaultColorTheme()
+  
+  return (
+    <>
+      <SVGContainer>
+        <GeoShapeBody shape={shape} shouldScale={true} />
+      </SVGContainer>
+      <HTMLContainer>
+        <RichTextLabel
+          shapeId={id}
+          font={props.font}
+          fontSize={LABEL_FONT_SIZES[props.size] * props.scale}
+          richText={props.richText}
+          // ... other props
+        />
+      </HTMLContainer>
+    </>
+  )
+}
+```
+
+<Tip>
+  Use `SVGContainer` for SVG content and `HTMLContainer` for HTML content. Both are positioned and transformed automatically.
+</Tip>
+
+### indicator
+
+Returns an SVG element shown when the shape is selected or hovered.
+
+<ParamField path="shape" type="Shape" required>
+  The shape to render an indicator for
+</ParamField>
+
+<ParamField path="returns" type="React.ReactElement" required>
+  SVG element (usually a path or rect)
+</ParamField>
+
+```typescript
+indicator(shape: TLGeoShape) {
+  const { size, dash, scale } = shape.props
+  const strokeWidth = STROKE_SIZES[size]
+  const path = getGeoShapePath(shape)
+  
+  return path.toSvg({
+    style: dash === 'draw' ? 'draw' : 'solid',
+    strokeWidth: 1,
+    randomSeed: shape.id,
+    roundness: strokeWidth * 2 * scale,
+  })
+}
+```
+
+## Canvas-based indicators
+
+For better performance, implement canvas-based indicators:
+
+```typescript
+override useLegacyIndicator() {
+  return false  // Use canvas rendering instead of SVG
+}
+
+override getIndicatorPath(shape: MyShape): Path2D | undefined {
+  const bounds = this.editor.getShapeGeometry(shape).bounds
+  const path = new Path2D()
+  path.rect(0, 0, bounds.width, bounds.height)
+  return path
+}
+```
+
+For complex indicators with clipping:
+
+```typescript
+override getIndicatorPath(shape: TLArrowShape): TLIndicatorPath {
+  const bodyPath = new Path2D(/* arrow body */)
+  const clipPath = new Path2D()
+  
+  // Create clip region
+  clipPath.rect(bounds.x, bounds.y, bounds.width, bounds.height)
+  clipPath.roundRect(labelBounds.x, labelBounds.y, labelBounds.w, labelBounds.h, 3.5)
+  
+  return {
+    path: bodyPath,
+    clipPath: clipPath,
+    additionalPaths: [arrowheadPath],
+  }
+}
+```
+
+## Lifecycle hooks
+
+### Creation and updates
+
+<Tabs>
+  <Tab title="onBeforeCreate">
+    ```typescript
+    onBeforeCreate(next: Shape): Shape | void {
+      // Validate or modify shape before creation
+      if (isEmptyRichText(next.props.richText)) {
+        return { ...next, props: { ...next.props, growY: 0 } }
+      }
+      
+      const labelHeight = getUnscaledLabelSize(this.editor, next).h
+      const growY = Math.max(0, labelHeight - next.props.h)
+      
+      return { ...next, props: { ...next.props, growY } }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="onBeforeUpdate">
+    ```typescript
+    onBeforeUpdate(prev: Shape, next: Shape): Shape | void {
+      // React to property changes
+      if (prev.props.richText === next.props.richText) {
+        return undefined  // No changes needed
+      }
+      
+      // Recalculate dimensions when text changes
+      const labelSize = getUnscaledLabelSize(this.editor, next)
+      const newGrowY = calculateGrowY(next.props.h, labelSize.h)
+      
+      return { ...next, props: { ...next.props, growY: newGrowY } }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Resize events
+
+<CodeGroup>
+```typescript onResize
+onResize(shape: Shape, info: TLResizeInfo<Shape>) {
+  const { scaleX, scaleY, newPoint } = info
+  
+  return {
+    x: newPoint.x,
+    y: newPoint.y,
+    props: {
+      w: shape.props.w * scaleX,
+      h: shape.props.h * scaleY,
+    },
+  }
+}
+```
+
+```typescript onResizeStart
+onResizeStart(shape: Shape): TLShapePartial<Shape> | void {
+  // Called when resize begins
+  return { props: { isResizing: true } }
+}
+```
+
+```typescript onResizeEnd
+onResizeEnd(initial: Shape, current: Shape): TLShapePartial<Shape> | void {
+  // Called when resize completes
+  return { props: { isResizing: false } }
+}
+```
+</CodeGroup>
+
+### Translation events
+
+```typescript
+onTranslateStart(shape: Shape): TLShapePartial<Shape> | void {
+  // Called when dragging begins
+}
+
+onTranslate(initial: Shape, current: Shape): TLShapePartial<Shape> | void {
+  // Called during dragging
+}
+
+onTranslateEnd(initial: Shape, current: Shape): TLShapePartial<Shape> | void {
+  // Called when dragging ends
+}
+```
+
+### Rotation events
+
+```typescript
+onRotateStart(shape: Shape): TLShapePartial<Shape> | void
+onRotate(initial: Shape, current: Shape): TLShapePartial<Shape> | void
+onRotateEnd(initial: Shape, current: Shape): TLShapePartial<Shape> | void
+```
+
+### Handle events
+
+For shapes with custom handles (like arrows):
+
+```typescript
+getHandles(shape: TLArrowShape): TLHandle[] {
+  const info = getArrowInfo(this.editor, shape)
+  
+  return [
+    {
+      id: 'start',
+      type: 'vertex',
+      index: 'a1' as IndexKey,
+      x: info.start.handle.x,
+      y: info.start.handle.y,
+    },
+    {
+      id: 'end',
+      type: 'vertex',
+      index: 'a3' as IndexKey,
+      x: info.end.handle.x,
+      y: info.end.handle.y,
+    },
+  ]
+}
+
+onHandleDrag(shape: Shape, info: TLHandleDragInfo<Shape>) {
+  const { handle, isPrecise } = info
+  
+  return {
+    props: {
+      [handle.id]: { x: handle.x, y: handle.y },
+    },
+  }
+}
+```
+
+## Interaction events
+
+```typescript
+onClick(shape: Shape): TLShapePartial<Shape> | void
+onDoubleClick(shape: Shape): TLShapePartial<Shape> | void
+onDoubleClickEdge(shape: Shape): TLShapePartial<Shape> | void
+onDoubleClickHandle(shape: Shape, handle: TLHandle): TLShapePartial<Shape> | void
+```
+
+### Edit mode
+
+```typescript
+canEdit(shape: Shape): boolean {
+  return true  // Shape supports double-click to edit
+}
+
+onEditStart(shape: Shape): void {
+  // Called when editing begins
+}
+
+onEditEnd(shape: Shape): void {
+  // Called when editing ends
+  const text = this.getText(shape)
+  if (text.length === 0) {
+    this.editor.deleteShapes([shape.id])
+  }
+}
+```
+
+## Capability methods
+
+Control what operations are allowed on a shape:
+
+<Tabs>
+  <Tab title="Resize">
+    ```typescript
+    canResize(shape: Shape): boolean {
+      return true
+    }
+    
+    hideResizeHandles(shape: Shape): boolean {
+      return false  // Show resize handles
+    }
+    
+    isAspectRatioLocked(shape: Shape): boolean {
+      return false  // Allow non-uniform scaling
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Binding">
+    ```typescript
+    canBind(opts: TLShapeUtilCanBindOpts): boolean {
+      const { fromShape, toShape, bindingType } = opts
+      
+      // Arrows can bind to shapes, but not to other arrows
+      if (bindingType === 'arrow') {
+        return toShape.type !== 'arrow'
+      }
+      
+      return true
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Editing">
+    ```typescript
+    canEdit(shape: Shape): boolean {
+      return true
+    }
+    
+    canEditInReadonly(shape: Shape): boolean {
+      return false  // Prevent editing in readonly mode
+    }
+    
+    canEditWhileLocked(shape: Shape): boolean {
+      return false  // Prevent editing when locked
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Other">
+    ```typescript
+    canSnap(shape: Shape): boolean {
+      return true  // Enable snapping
+    }
+    
+    canCrop(shape: Shape): boolean {
+      return false  // Disable cropping
+    }
+    
+    canScroll(shape: Shape): boolean {
+      return false  // Disable scrolling while editing
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## SVG export
+
+```typescript
+toSvg(shape: Shape, ctx: SvgExportContext): ReactElement | null {
+  ctx.addExportDef(getFillDefForExport(shape.props.fill))
+  const theme = getDefaultColorTheme(ctx)
+  
+  return (
+    <g>
+      <GeoShapeBody shape={shape} forceSolid={false} />
+      <RichTextSVG
+        fontSize={LABEL_FONT_SIZES[shape.props.size]}
+        font={shape.props.font}
+        richText={shape.props.richText}
+        labelColor={getColorValue(theme, shape.props.labelColor, 'solid')}
+        bounds={bounds}
+      />
+    </g>
+  )
+}
+
+getCanvasSvgDefs(): TLShapeUtilCanvasSvgDef[] {
+  return [getFillDefForCanvas()]
+}
+```
+
+## Snapping geometry
+
+```typescript
+getBoundsSnapGeometry(shape: Shape): BoundsSnapGeometry {
+  // Define snap points for translate/resize
+  return {
+    points: this.getGeometry(shape).vertices,
+  }
+}
+
+getHandleSnapGeometry(shape: TLGeoShape): HandleSnapGeometry {
+  const geometry = this.getGeometry(shape)
+  const outline = geometry.children[0]
+  
+  switch (shape.props.geo) {
+    case 'rectangle':
+    case 'triangle':
+      return {
+        outline: outline,
+        points: [...outline.vertices, geometry.bounds.center],
+      }
+    case 'ellipse':
+    case 'cloud':
+      return {
+        outline: outline,
+        points: [geometry.bounds.center],
+      }
+  }
+}
+```
+
+## Text methods
+
+```typescript
+getText(shape: Shape): string | undefined {
+  return renderPlaintextFromRichText(this.editor, shape.props.richText)
+}
+
+getFontFaces(shape: Shape): TLFontFace[] {
+  if (isEmptyRichText(shape.props.richText)) {
+    return EMPTY_ARRAY
+  }
+  
+  return getFontsFromRichText(this.editor, shape.props.richText, {
+    family: `tldraw_${shape.props.font}`,
+    weight: 'normal',
+    style: 'normal',
+  })
+}
+```
+
+## Configuration
+
+Customize ShapeUtil behavior with the `options` property:
+
+```typescript
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  override options = {
+    showTextOutline: true,
+    minElbowLegLength: { s: 12, m: 18, l: 24, xl: 36 },
+  }
+}
+
+// Override options when registering
+const CustomShapeUtil = MyShapeUtil.configure({
+  showTextOutline: false,
+})
+```
+
+<Note>
+  Use `ShapeUtil.configure()` to create a customized version without subclassing.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Geometry system" icon="shapes" href="/shapes/geometry">
+    Learn about Geometry2d primitives
+  </Card>
+  <Card title="Shape interactions" icon="hand-pointer" href="/shapes/interactions">
+    Handle drag, drop, and other events
+  </Card>
+</CardGroup>

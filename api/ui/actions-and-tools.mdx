@@ -1,0 +1,465 @@
+---
+title: Actions and tools API
+description: Define and customize editor actions and tool behaviors
+---
+
+Actions and tools are the core of tldraw's UI interaction system. Actions represent discrete operations (like undo, delete, or export), while tools represent continuous interaction modes (like drawing, selecting, or erasing).
+
+## Actions
+
+Actions are operations that can be triggered from menus, keyboard shortcuts, or programmatically. They're defined as objects with metadata and an `onSelect` callback.
+
+### TLUiActionItem
+
+Interface for defining an action.
+
+```typescript
+interface TLUiActionItem {
+  id: string
+  label: string
+  icon?: string | ReactElement
+  kbd?: string
+  readonlyOk?: boolean
+  checkbox?: boolean
+  isRequiredA11yAction?: boolean
+  onSelect(source: TLUiEventSource): Promise<void> | void
+}
+```
+
+#### Properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the action.
+</ParamField>
+
+<ParamField path="label" type="string | { [key: string]: string }" required>
+  Translation key for the action label. Can be an object with context-specific labels (e.g., `{ default: 'action.delete', 'context-menu': 'action.delete.short' }`).
+</ParamField>
+
+<ParamField path="icon" type="string | ReactElement">
+  Icon identifier or custom React element.
+</ParamField>
+
+<ParamField path="kbd" type="string">
+  Keyboard shortcut (e.g., `'cmd+z,ctrl+z'` for undo on Mac/Windows).
+</ParamField>
+
+<ParamField path="readonlyOk" type="boolean">
+  Whether this action can be used when the editor is readonly.
+</ParamField>
+
+<ParamField path="checkbox" type="boolean">
+  Whether this action should render as a checkbox in menus.
+</ParamField>
+
+<ParamField path="isRequiredA11yAction" type="boolean">
+  Whether this action is required for accessibility.
+</ParamField>
+
+<ParamField path="onSelect" type="(source: TLUiEventSource) => Promise<void> | void" required>
+  Function called when the action is triggered. The `source` parameter indicates where the action was triggered from (e.g., 'menu', 'toolbar', 'keyboard').
+</ParamField>
+
+### Creating custom actions
+
+```tsx
+import { TldrawUiContextProvider } from 'tldraw'
+
+function App() {
+  return (
+    <TldrawUiContextProvider
+      overrides={{
+        actions: (editor, actions, helpers) => {
+          return {
+            ...actions,
+            'custom-export': {
+              id: 'custom-export',
+              label: 'Export to JSON',
+              icon: 'external-link',
+              kbd: 'cmd+shift+e,ctrl+shift+e',
+              readonlyOk: true,
+              onSelect: async (source) => {
+                const data = editor.store.serialize()
+                const json = JSON.stringify(data, null, 2)
+                const blob = new Blob([json], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = 'drawing.json'
+                a.click()
+                URL.revokeObjectURL(url)
+                
+                helpers.addToast({
+                  title: 'Exported',
+                  description: 'Drawing exported as JSON',
+                  severity: 'success',
+                })
+              },
+            },
+          }
+        },
+      }}
+    >
+      <Tldraw />
+    </TldrawUiContextProvider>
+  )
+}
+```
+
+### Built-in actions
+
+The tldraw UI includes many built-in actions:
+
+- **Edit actions**: `undo`, `redo`, `cut`, `copy`, `paste`, `delete`, `duplicate`, `select-all`, `select-none`
+- **Arrange actions**: `bring-to-front`, `bring-forward`, `send-backward`, `send-to-back`, `group`, `ungroup`
+- **Align actions**: `align-left`, `align-center-horizontal`, `align-right`, `align-top`, `align-center-vertical`, `align-bottom`
+- **Distribute actions**: `distribute-horizontal`, `distribute-vertical`, `stretch-horizontal`, `stretch-vertical`
+- **Transform actions**: `flip-horizontal`, `flip-vertical`, `rotate-cw`, `rotate-ccw`, `pack`, `stack-horizontal`, `stack-vertical`
+- **Export actions**: `export-as-svg`, `export-as-png`, `copy-as-svg`, `copy-as-png`
+- **Zoom actions**: `zoom-in`, `zoom-out`, `zoom-to-100`, `zoom-to-fit`, `zoom-to-selection`
+- **Toggle actions**: `toggle-snap-mode`, `toggle-dark-mode`, `toggle-grid`, `toggle-focus-mode`, `toggle-tool-lock`
+
+### Accessing actions
+
+```tsx
+import { useActions } from 'tldraw'
+
+function CustomButton() {
+  const actions = useActions()
+  
+  return (
+    <button onClick={() => actions['undo'].onSelect('custom-ui')}>
+      Undo
+    </button>
+  )
+}
+```
+
+## Tools
+
+Tools represent interaction modes in the editor. Each tool handles pointer events, keyboard input, and rendering.
+
+### TLUiToolItem
+
+Interface for defining a tool in the UI.
+
+```typescript
+interface TLUiToolItem {
+  id: string
+  label: string
+  shortcutsLabel?: string
+  icon: string | ReactElement
+  kbd?: string
+  readonlyOk?: boolean
+  onSelect(source: TLUiEventSource): void
+  onDragStart?(source: TLUiEventSource, info: TLPointerEventInfo): void
+  meta?: Record<string, any>
+}
+```
+
+#### Properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the tool.
+</ParamField>
+
+<ParamField path="label" type="string" required>
+  Translation key for the tool label.
+</ParamField>
+
+<ParamField path="shortcutsLabel" type="string">
+  Alternative label for keyboard shortcuts dialog.
+</ParamField>
+
+<ParamField path="icon" type="string | ReactElement" required>
+  Icon identifier or custom React element.
+</ParamField>
+
+<ParamField path="kbd" type="string">
+  Keyboard shortcut to activate the tool.
+</ParamField>
+
+<ParamField path="readonlyOk" type="boolean">
+  Whether this tool can be used when the editor is readonly.
+</ParamField>
+
+<ParamField path="onSelect" type="(source: TLUiEventSource) => void" required>
+  Function called when the tool is selected.
+</ParamField>
+
+<ParamField path="onDragStart" type="(source: TLUiEventSource, info: TLPointerEventInfo) => void">
+  Function called when the tool icon is dragged from the toolbar to create a shape.
+</ParamField>
+
+<ParamField path="meta" type="Record<string, any>">
+  Additional metadata for the tool.
+</ParamField>
+
+### Creating custom tools
+
+```tsx
+import { TldrawUiContextProvider } from 'tldraw'
+
+function App() {
+  return (
+    <TldrawUiContextProvider
+      overrides={{
+        tools: (editor, tools, helpers) => {
+          return {
+            ...tools,
+            'my-tool': {
+              id: 'my-tool',
+              label: 'My Tool',
+              icon: 'tool-pencil',
+              kbd: 'm',
+              onSelect: (source) => {
+                editor.setCurrentTool('my-tool')
+              },
+            },
+          }
+        },
+      }}
+    >
+      <Tldraw />
+    </TldrawUiContextProvider>
+  )
+}
+```
+
+### Built-in tools
+
+The tldraw UI includes these built-in tools:
+
+- `select` - Select and manipulate shapes
+- `hand` - Pan the canvas
+- `draw` - Draw freehand shapes
+- `eraser` - Erase shapes
+- `text` - Create text shapes
+- `note` - Create sticky notes
+- `arrow` - Draw arrows
+- `line` - Draw lines
+- `frame` - Create frames
+- `highlight` - Highlight areas
+- `laser` - Laser pointer for presentations
+- Geometry tools: `rectangle`, `ellipse`, `triangle`, `diamond`, `pentagon`, `hexagon`, `octagon`, `star`, `rhombus`, `cloud`, `trapezoid`, `arrow-right`, `arrow-left`, `arrow-up`, `arrow-down`, `x-box`, `check-box`
+
+### Drag-to-create shapes
+
+Tools can support dragging from the toolbar to create shapes:
+
+```tsx
+import { onDragFromToolbarToCreateShape, createShapeId } from 'tldraw'
+
+const tool = {
+  id: 'custom-shape',
+  label: 'Custom Shape',
+  icon: 'tool-pencil',
+  onSelect: (source) => {
+    editor.setCurrentTool('custom-shape')
+  },
+  onDragStart: (source, info) => {
+    onDragFromToolbarToCreateShape(editor, info, {
+      createShape: (id) => {
+        editor.createShape({
+          id,
+          type: 'geo',
+          props: { w: 200, h: 200 },
+        })
+      },
+      onDragEnd: (id) => {
+        // Optional: Do something after drag completes
+        console.log('Created shape:', id)
+      },
+    })
+  },
+}
+```
+
+### Accessing tools
+
+```tsx
+import { useTools, useEditor } from 'tldraw'
+
+function ToolPalette() {
+  const tools = useTools()
+  const editor = useEditor()
+  const currentToolId = editor.getCurrentToolId()
+  
+  return (
+    <div>
+      {Object.values(tools).map((tool) => (
+        <button
+          key={tool.id}
+          onClick={() => tool.onSelect('custom-ui')}
+          data-active={currentToolId === tool.id}
+        >
+          {tool.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+```
+
+## Helper utilities
+
+### TLUiOverrideHelpers
+
+When customizing actions and tools, you receive a `helpers` object with useful functions:
+
+```typescript
+interface TLUiOverrideHelpers {
+  // Translation
+  msg(key: string): string
+  
+  // Dialogs
+  addDialog(dialog: TLUiDialog): void
+  clearDialogs(): void
+  
+  // Toasts
+  addToast(toast: TLUiToast): void
+  clearToasts(): void
+  
+  // Media
+  insertMedia(): void
+  
+  // Export
+  exportAs(ids: TLShapeId[], options: TLExportOptions): void
+  copyAs(ids: TLShapeId[], format: 'svg' | 'png'): void
+  
+  // Clipboard
+  cut(source: TLUiEventSource): void
+  copy(source: TLUiEventSource): void
+  paste(clipboardItems: any[], source: TLUiEventSource, point?: VecLike): void
+  
+  // Print
+  printSelectionOrPages(): void
+  
+  // Embed
+  getEmbedDefinition(url: string): TLEmbedDefinition | undefined
+}
+```
+
+### Using helpers in custom actions
+
+```tsx
+const customAction = {
+  id: 'save-to-cloud',
+  label: 'Save to Cloud',
+  icon: 'cloud',
+  onSelect: async (source) => {
+    try {
+      const data = editor.store.serialize()
+      await fetch('/api/save', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+      
+      helpers.addToast({
+        title: helpers.msg('save.success.title'),
+        description: helpers.msg('save.success.description'),
+        severity: 'success',
+      })
+    } catch (error) {
+      helpers.addToast({
+        title: helpers.msg('save.error.title'),
+        description: error.message,
+        severity: 'error',
+      })
+    }
+  },
+}
+```
+
+## Event sources
+
+The `source` parameter in action and tool callbacks indicates where the action was triggered:
+
+- `'menu'` - From the main menu
+- `'context-menu'` - From the right-click context menu
+- `'toolbar'` - From the toolbar
+- `'keyboard'` - From a keyboard shortcut
+- `'quick-actions'` - From the quick actions panel
+- `'helper-buttons'` - From helper buttons
+- `'unknown'` - Unknown source
+
+This allows you to customize behavior based on how the action was triggered:
+
+```tsx
+const action = {
+  id: 'context-aware',
+  label: 'Context Aware Action',
+  onSelect: (source) => {
+    if (source === 'keyboard') {
+      console.log('Triggered via keyboard')
+    } else if (source === 'context-menu') {
+      console.log('Triggered from context menu')
+    }
+  },
+}
+```
+
+## Complete example
+
+Here's a complete example showing how to add custom actions and tools:
+
+```tsx
+import { Tldraw, TldrawUiContextProvider } from 'tldraw'
+
+function App() {
+  return (
+    <TldrawUiContextProvider
+      overrides={{
+        actions: (editor, actions, helpers) => ({
+          ...actions,
+          'export-json': {
+            id: 'export-json',
+            label: 'Export JSON',
+            icon: 'external-link',
+            kbd: 'cmd+shift+j,ctrl+shift+j',
+            readonlyOk: true,
+            onSelect: async (source) => {
+              const data = editor.store.serialize()
+              const json = JSON.stringify(data, null, 2)
+              const blob = new Blob([json], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'drawing.json'
+              a.click()
+              URL.revokeObjectURL(url)
+              
+              helpers.addToast({
+                title: 'Exported',
+                description: 'Drawing exported as JSON',
+                severity: 'success',
+              })
+            },
+          },
+        }),
+        tools: (editor, tools, helpers) => ({
+          ...tools,
+          'stamp': {
+            id: 'stamp',
+            label: 'Stamp',
+            icon: 'tool-pencil',
+            kbd: 's',
+            onSelect: (source) => {
+              // Create a stamp at the center of the viewport
+              const center = editor.getViewportPageCenter()
+              editor.createShape({
+                type: 'geo',
+                x: center.x - 50,
+                y: center.y - 50,
+                props: { w: 100, h: 100, geo: 'star' },
+              })
+            },
+          },
+        }),
+      }}
+    >
+      <Tldraw />
+    </TldrawUiContextProvider>
+  )
+}
+```

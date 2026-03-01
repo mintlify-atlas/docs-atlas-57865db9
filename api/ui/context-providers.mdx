@@ -1,0 +1,293 @@
+---
+title: UI context providers
+description: React context providers for managing tldraw UI state and configuration
+---
+
+The tldraw UI system uses React context providers to manage state, configuration, and UI components. These providers wrap your application and make UI functionality available throughout the component tree.
+
+## TldrawUiContextProvider
+
+The main provider that wraps all UI-related contexts. This is the top-level provider you'll typically use.
+
+```tsx
+import { TldrawUiContextProvider } from 'tldraw'
+
+function App() {
+  return (
+    <TldrawUiContextProvider
+      assetUrls={{ fonts: { ... } }}
+      overrides={{ actions: (editor, actions) => ({ ...actions }) }}
+      components={{ ContextMenu: MyCustomContextMenu }}
+      onUiEvent={(name, data) => console.log(name, data)}
+    >
+      {/* Your app */}
+    </TldrawUiContextProvider>
+  )
+}
+```
+
+### Props
+
+<ParamField path="assetUrls" type="RecursivePartial<TLUiAssetUrls>">
+  URLs for fonts and other UI assets.
+</ParamField>
+
+<ParamField path="overrides" type="TLUiOverrides | TLUiOverrides[]">
+  Customizations for UI actions, tools, and translations.
+</ParamField>
+
+<ParamField path="components" type="TLUiComponents">
+  Override default UI components with custom implementations.
+</ParamField>
+
+<ParamField path="onUiEvent" type="TLUiEventHandler">
+  Callback fired when UI events occur (e.g., tool selection, menu actions).
+</ParamField>
+
+<ParamField path="forceMobile" type="boolean">
+  Force mobile breakpoints regardless of viewport size.
+</ParamField>
+
+<ParamField path="mediaMimeTypes" type="string[]">
+  Supported MIME types for media file uploads.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Child components.
+</ParamField>
+
+## TldrawUiComponentsProvider
+
+Provides UI component overrides throughout the component tree. Typically used via `TldrawUiContextProvider` but can be used independently.
+
+```tsx
+import { TldrawUiComponentsProvider } from 'tldraw'
+
+function CustomUI() {
+  return (
+    <TldrawUiComponentsProvider
+      overrides={{
+        ContextMenu: MyContextMenu,
+        Toolbar: MyToolbar,
+        StylePanel: null, // Hide style panel
+      }}
+    >
+      {/* Components that use UI components */}
+    </TldrawUiComponentsProvider>
+  )
+}
+```
+
+### Props
+
+<ParamField path="overrides" type="TLUiComponents">
+  Component overrides. Set to `null` to hide a component.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Child components.
+</ParamField>
+
+## ActionsProvider
+
+Provides UI actions (undo, redo, delete, etc.) to the component tree. Actions are functions that can be triggered from menus, keyboard shortcuts, or programmatically.
+
+```tsx
+import { ActionsProvider } from 'tldraw'
+
+function CustomActions() {
+  return (
+    <ActionsProvider
+      overrides={(editor, actions, helpers) => ({
+        ...actions,
+        'my-custom-action': {
+          id: 'my-custom-action',
+          label: 'My Action',
+          kbd: 'cmd+shift+x',
+          icon: 'tool-pencil',
+          onSelect: (source) => {
+            console.log('Custom action triggered from', source)
+          },
+        },
+      })}
+    >
+      {/* Components */}
+    </ActionsProvider>
+  )
+}
+```
+
+### Props
+
+<ParamField path="overrides" type="(editor: Editor, actions: TLUiActionsContextType, helpers: TLUiOverrideHelpers) => TLUiActionsContextType">
+  Function that receives current actions and returns modified actions.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Child components.
+</ParamField>
+
+## ToolsProvider
+
+Provides tool definitions (select, draw, geo, etc.) to the component tree.
+
+```tsx
+import { ToolsProvider } from 'tldraw'
+
+function CustomTools() {
+  return (
+    <ToolsProvider
+      overrides={(editor, tools, helpers) => ({
+        ...tools,
+        'my-tool': {
+          id: 'my-tool',
+          label: 'My Tool',
+          icon: 'tool-pencil',
+          kbd: 'm',
+          onSelect: (source) => {
+            editor.setCurrentTool('my-tool')
+          },
+        },
+      })}
+    >
+      {/* Components */}
+    </ToolsProvider>
+  )
+}
+```
+
+### Props
+
+<ParamField path="overrides" type="(editor: Editor, tools: TLUiToolsContextType, helpers: Partial<TLUiOverrideHelpers>) => TLUiToolsContextType">
+  Function that receives current tools and returns modified tools.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Child components.
+</ParamField>
+
+## BreakPointProvider
+
+Provides responsive breakpoint information based on viewport size.
+
+```tsx
+import { BreakPointProvider, useBreakpoint } from 'tldraw'
+
+function ResponsiveComponent() {
+  const breakpoint = useBreakpoint()
+  return <div>Current breakpoint: {breakpoint}</div>
+}
+
+function App() {
+  return (
+    <BreakPointProvider forceMobile={false}>
+      <ResponsiveComponent />
+    </BreakPointProvider>
+  )
+}
+```
+
+### Props
+
+<ParamField path="forceMobile" type="boolean" default="false">
+  Force mobile breakpoints regardless of viewport width.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Child components.
+</ParamField>
+
+## TldrawUiDialogsProvider
+
+Manages dialog state for the UI (e.g., keyboard shortcuts dialog, embed dialog).
+
+## TldrawUiToastsProvider
+
+Manages toast notifications displayed in the UI.
+
+## TldrawUiEventsProvider
+
+Tracks and reports UI events for analytics and debugging.
+
+### Props
+
+<ParamField path="onEvent" type="TLUiEventHandler">
+  Callback function invoked when UI events occur.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Child components.
+</ParamField>
+
+## Usage patterns
+
+### Basic setup
+
+```tsx
+import { Tldraw, TldrawUiContextProvider } from 'tldraw'
+
+function App() {
+  return (
+    <TldrawUiContextProvider>
+      <Tldraw />
+    </TldrawUiContextProvider>
+  )
+}
+```
+
+### Custom actions
+
+```tsx
+import { TldrawUiContextProvider } from 'tldraw'
+
+function App() {
+  return (
+    <TldrawUiContextProvider
+      overrides={{
+        actions: (editor, actions, helpers) => ({
+          ...actions,
+          'export-json': {
+            id: 'export-json',
+            label: 'Export JSON',
+            kbd: 'cmd+shift+e',
+            onSelect: () => {
+              const data = editor.store.serialize()
+              console.log(data)
+            },
+          },
+        }),
+      }}
+    >
+      <Tldraw />
+    </TldrawUiContextProvider>
+  )
+}
+```
+
+### Custom components
+
+```tsx
+import { TldrawUiContextProvider, DefaultToolbar } from 'tldraw'
+
+function CustomToolbar() {
+  return (
+    <div>
+      <DefaultToolbar />
+      <button>Custom Button</button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <TldrawUiContextProvider
+      components={{
+        Toolbar: CustomToolbar,
+        StylePanel: null, // Hide style panel
+      }}
+    >
+      <Tldraw />
+    </TldrawUiContextProvider>
+  )
+}
+```

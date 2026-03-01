@@ -1,0 +1,312 @@
+---
+title: ZoomTool
+description: Tool for zooming in and out by brushing a region or clicking
+---
+
+# ZoomTool
+
+The `ZoomTool` provides an interactive way to zoom in and out of the canvas by clicking or drawing a selection rectangle. It's typically activated temporarily and returns to the previous tool after the zoom operation completes.
+
+## Overview
+
+The ZoomTool enables:
+- Click to zoom in at a point
+- Alt/Option + Click to zoom out at a point
+- Drag to draw a zoom rectangle (zoom to fit that region)
+- Automatic return to the previous tool after zooming
+- Visual feedback with zoom-in/zoom-out cursors
+
+## Static Properties
+
+<ParamField path="id" type="string" default="'zoom'">
+  The tool identifier
+</ParamField>
+
+<ParamField path="initial" type="string" default="'idle'">
+  Initial child state when the tool is activated
+</ParamField>
+
+<ParamField path="isLockable" type="boolean" default="false">
+  The zoom tool cannot be locked
+</ParamField>
+
+## Child States
+
+The ZoomTool has four child states:
+
+- **Idle** - Default state, waiting for user input
+- **Pointing** - User has pressed down but not yet started dragging
+- **ZoomBrushing** - User is drawing a rectangle to zoom to that region
+- **ZoomQuick** - Quick zoom mode for immediate zoom operations
+
+## Instance Properties
+
+<ParamField path="info" type="TLPointerEventInfo & { onInteractionEnd?: string }">
+  Stores information about the interaction, including which tool to return to
+</ParamField>
+
+## Lifecycle Methods
+
+### onEnter()
+
+Called when the zoom tool is activated.
+
+```typescript
+onEnter(info: TLPointerEventInfo & { onInteractionEnd: string }): void
+```
+
+<ParamField path="info" type="TLPointerEventInfo & { onInteractionEnd: string }" required>
+  Event info including the tool ID to return to after zooming (e.g., 'select.idle')
+</ParamField>
+
+Stores the interaction info, sets the tool ID mask (to show the previous tool in UI), and updates the cursor.
+
+### onExit()
+
+Called when exiting the zoom tool.
+
+```typescript
+onExit(): void
+```
+
+Clears the tool ID mask, resets the zoom brush state, and restores the default cursor.
+
+## Event Handlers
+
+### onKeyDown()
+
+Updates the cursor when keys are pressed (e.g., Alt for zoom out).
+
+```typescript
+onKeyDown(): void
+```
+
+### onKeyUp()
+
+Handles key release events.
+
+```typescript
+onKeyUp(info: TLKeyboardEventInfo): void
+```
+
+<ParamField path="info" type="TLKeyboardEventInfo" required>
+  Keyboard event information
+</ParamField>
+
+Updates the cursor and completes the zoom operation if the 'Z' key is released.
+
+### onInterrupt()
+
+Handles interruptions to the zoom operation.
+
+```typescript
+onInterrupt(): void
+```
+
+Completes the zoom operation and returns to the previous tool.
+
+## Usage Example
+
+```typescript
+import { ZoomTool } from '@tldraw/tldraw'
+
+// Activate the zoom tool temporarily
+editor.setCurrentTool('zoom', { onInteractionEnd: 'select' })
+
+// The tool will automatically return to 'select' after zooming
+
+// Check if zoom tool is active
+const isZoomActive = editor.getCurrentToolId() === 'zoom'
+```
+
+## Programmatic Zooming
+
+You typically don't need the ZoomTool for programmatic zooming:
+
+```typescript
+// Zoom in at a point
+const point = { x: 100, y: 100 }
+editor.zoomIn(point)
+
+// Zoom out at a point
+editor.zoomOut(point)
+
+// Zoom to fit specific bounds
+editor.zoomToBounds({
+  x: 0,
+  y: 0,
+  w: 1000,
+  h: 800
+})
+
+// Zoom to fit all content
+editor.zoomToFit()
+
+// Zoom to selection
+editor.zoomToSelection()
+
+// Set specific zoom level (1.0 = 100%)
+editor.setZoomLevel(1.5)
+
+// Get current zoom level
+const zoom = editor.getZoomLevel()
+```
+
+## Keyboard Shortcuts
+
+By default in tldraw:
+- **Z** - Activate zoom tool (hold and click/drag)
+- **Alt/Option + Z** - Zoom out mode
+- **Ctrl/Cmd + +** - Zoom in
+- **Ctrl/Cmd + -** - Zoom out  
+- **Ctrl/Cmd + 0** - Reset to 100% zoom
+- **Ctrl/Cmd + 1** - Zoom to fit
+- **Ctrl/Cmd + 2** - Zoom to selection
+
+## Extending ZoomTool
+
+You can extend the ZoomTool to customize its behavior:
+
+```typescript
+import { ZoomTool, TLPointerEventInfo } from '@tldraw/tldraw'
+
+class MyCustomZoomTool extends ZoomTool {
+  override onEnter(info: TLPointerEventInfo & { onInteractionEnd: string }) {
+    super.onEnter(info)
+    console.log('Zoom tool activated')
+  }
+  
+  override onExit() {
+    super.onExit()
+    console.log('Zoom tool deactivated')
+  }
+  
+  // Customize cursor behavior
+  private override updateCursor() {
+    if (this.editor.inputs.getAltKey()) {
+      this.editor.setCursor({ type: 'zoom-out', rotation: 0 })
+    } else {
+      this.editor.setCursor({ type: 'zoom-in', rotation: 0 })
+    }
+  }
+}
+```
+
+## Common Patterns
+
+### Temporary Zoom Tool Activation
+
+```typescript
+// Hold 'Z' key to activate zoom tool
+let previousTool: string
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyZ' && !e.repeat) {
+    previousTool = editor.getCurrentToolId()
+    editor.setCurrentTool('zoom', { 
+      onInteractionEnd: previousTool 
+    })
+  }
+})
+
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'KeyZ') {
+    editor.setCurrentTool(previousTool)
+  }
+})
+```
+
+### Zoom to Selected Shapes
+
+```typescript
+// Zoom to fit selected shapes with padding
+function zoomToSelection(padding = 50) {
+  const selectedShapes = editor.getSelectedShapes()
+  
+  if (selectedShapes.length === 0) {
+    console.log('No shapes selected')
+    return
+  }
+  
+  const bounds = editor.getSelectionPageBounds()
+  
+  if (bounds) {
+    editor.zoomToBounds({
+      x: bounds.x - padding,
+      y: bounds.y - padding,
+      w: bounds.w + padding * 2,
+      h: bounds.h + padding * 2
+    }, {
+      animation: { duration: 300, easing: EASINGS.easeInOutCubic }
+    })
+  }
+}
+```
+
+### Zoom with Constraints
+
+```typescript
+// Limit zoom levels
+const MIN_ZOOM = 0.1
+const MAX_ZOOM = 5
+
+const dispose = editor.sideEffects.registerBeforeChangeHandler(
+  'camera',
+  (prev, next) => {
+    return {
+      ...next,
+      z: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next.z))
+    }
+  }
+)
+
+// Clean up when done
+dispose()
+```
+
+### Smooth Zoom Animation
+
+```typescript
+import { EASINGS } from '@tldraw/editor'
+
+// Zoom with custom animation
+editor.zoomIn(currentPoint, {
+  animation: {
+    duration: 400,
+    easing: EASINGS.easeInOutCubic
+  }
+})
+
+// Multiple zoom steps
+function zoomInMultiple(steps: number) {
+  for (let i = 0; i < steps; i++) {
+    setTimeout(() => {
+      editor.zoomIn(editor.getViewportScreenCenter())
+    }, i * 200)
+  }
+}
+```
+
+## Camera and Viewport Info
+
+```typescript
+// Get current camera state
+const camera = editor.getCamera()
+console.log(`Position: ${camera.x}, ${camera.y}, Zoom: ${camera.z}`)
+
+// Get zoom level
+const zoomLevel = editor.getZoomLevel() // 1.0 = 100%
+
+// Get viewport bounds in page space
+const viewportPageBounds = editor.getViewportPageBounds()
+
+// Get viewport center
+const center = editor.getViewportPageCenter()
+```
+
+## See Also
+
+- [StateNode](/api/tools/state-node) - Base class for all tools
+- [HandTool](/api/tools/hand-tool) - Panning tool with zoom shortcuts
+- [Editor camera methods](/api/editor#camera) - Programmatic camera control
+- [Camera animations](/guides/camera) - Advanced camera techniques

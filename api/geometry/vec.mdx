@@ -1,0 +1,717 @@
+---
+title: Vec class
+description: 2D vector class for mathematical operations and spatial calculations
+---
+
+The `Vec` class represents a 2D vector with x, y, and optional z (pressure) components. It provides extensive methods for vector math operations including addition, subtraction, rotation, interpolation, and distance calculations.
+
+## Constructor
+
+```typescript
+const vector = new Vec(x, y, z)
+```
+
+<ParamField path="x" type="number" default="0">
+  The x-coordinate
+</ParamField>
+
+<ParamField path="y" type="number" default="0">
+  The y-coordinate
+</ParamField>
+
+<ParamField path="z" type="number" default="1">
+  The z-coordinate, used for pressure in drawing operations
+</ParamField>
+
+## Properties
+
+<ParamField path="x" type="number">
+  The x-coordinate of the vector
+</ParamField>
+
+<ParamField path="y" type="number">
+  The y-coordinate of the vector
+</ParamField>
+
+<ParamField path="z" type="number">
+  The z-coordinate of the vector (pressure)
+</ParamField>
+
+<ParamField path="pressure" type="number">
+  Alias for z (getter only)
+</ParamField>
+
+## Instance methods
+
+### set
+
+```typescript
+vec.set(x?: number, y?: number, z?: number): Vec
+```
+
+Sets the vector's coordinates. Returns the vector for chaining.
+
+### setTo
+
+```typescript
+vec.setTo(other: VecLike): Vec
+```
+
+Copies another vector's values. Returns the vector for chaining.
+
+### clone
+
+```typescript
+vec.clone(): Vec
+```
+
+Creates a copy of the vector.
+
+```typescript
+const v1 = new Vec(10, 20)
+const v2 = v1.clone()
+```
+
+### add / sub
+
+```typescript
+vec.add(other: VecLike): Vec
+vec.sub(other: VecLike): Vec
+```
+
+Adds or subtracts another vector. Returns the vector for chaining.
+
+```typescript
+const v = new Vec(10, 20)
+v.add({ x: 5, y: 10 }) // Vec(15, 30)
+```
+
+### addXY / subXY
+
+```typescript
+vec.addXY(x: number, y: number): Vec
+vec.subXY(x: number, y: number): Vec
+```
+
+Adds or subtracts x and y values directly.
+
+### addScalar / subScalar
+
+```typescript
+vec.addScalar(n: number): Vec
+vec.subScalar(n: number): Vec
+```
+
+Adds or subtracts a scalar value to both x and y.
+
+### mul / div
+
+```typescript
+vec.mul(scalar: number): Vec
+vec.div(scalar: number): Vec
+```
+
+Multiplies or divides the vector by a scalar.
+
+```typescript
+const v = new Vec(10, 20)
+v.mul(2) // Vec(20, 40)
+```
+
+### mulV / divV
+
+```typescript
+vec.mulV(other: VecLike): Vec
+vec.divV(other: VecLike): Vec
+```
+
+Component-wise multiplication or division with another vector.
+
+### rot
+
+```typescript
+vec.rot(radians: number): Vec
+```
+
+Rotates the vector around the origin by the given angle in radians. Returns the vector for chaining.
+
+```typescript
+const v = new Vec(10, 0)
+v.rot(Math.PI / 2) // Vec(0, 10) - rotated 90 degrees
+```
+
+### rotWith
+
+```typescript
+vec.rotWith(center: VecLike, radians: number): Vec
+```
+
+Rotates the vector around a center point.
+
+```typescript
+const v = new Vec(20, 0)
+const center = new Vec(10, 0)
+v.rotWith(center, Math.PI) // Rotates around center point
+```
+
+### uni
+
+```typescript
+vec.uni(): Vec
+```
+
+Normalizes the vector to unit length (length = 1). Returns the vector for chaining.
+
+```typescript
+const v = new Vec(3, 4)
+v.uni() // Vec(0.6, 0.8) - length is now 1
+```
+
+### per
+
+```typescript
+vec.per(): Vec
+```
+
+Returns the perpendicular vector (rotated 90 degrees counterclockwise).
+
+```typescript
+const v = new Vec(10, 0)
+v.per() // Vec(0, -10)
+```
+
+### neg
+
+```typescript
+vec.neg(): Vec
+```
+
+Negates the vector (multiplies by -1).
+
+### abs
+
+```typescript
+vec.abs(): Vec
+```
+
+Makes both components positive.
+
+### len / len2
+
+```typescript
+vec.len(): number
+vec.len2(): number
+```
+
+Returns the vector's length. `len2()` returns the squared length (faster, no square root).
+
+```typescript
+const v = new Vec(3, 4)
+v.len() // 5
+v.len2() // 25
+```
+
+### dist
+
+```typescript
+vec.dist(other: VecLike): number
+```
+
+Returns the distance to another vector.
+
+```typescript
+const v1 = new Vec(0, 0)
+const v2 = new Vec(3, 4)
+v1.dist(v2) // 5
+```
+
+### angle
+
+```typescript
+vec.angle(other: VecLike): number
+```
+
+Returns the angle from this vector to another vector in radians.
+
+### toAngle
+
+```typescript
+vec.toAngle(): number
+```
+
+Converts the vector to an angle in radians (0 to 2π).
+
+### lrp
+
+```typescript
+vec.lrp(other: VecLike, t: number): Vec
+```
+
+Linearly interpolates between this vector and another. Returns the vector for chaining.
+
+```typescript
+const a = new Vec(0, 0)
+const b = new Vec(100, 100)
+a.lrp(b, 0.5) // Vec(50, 50) - midpoint
+```
+
+### tan
+
+```typescript
+vec.tan(other: VecLike): Vec
+```
+
+Returns the unit tangent vector pointing from other to this vector.
+
+### dpr
+
+```typescript
+vec.dpr(other: VecLike): number
+```
+
+Returns the dot product with another vector.
+
+### cpr
+
+```typescript
+vec.cpr(other: VecLike): number
+```
+
+Returns the cross product with another vector.
+
+### clamp
+
+```typescript
+vec.clamp(min: number, max?: number): Vec
+```
+
+Clamps the vector's components between min and max values.
+
+### snapToGrid
+
+```typescript
+vec.snapToGrid(gridSize: number): Vec
+```
+
+Snaps the vector to a grid.
+
+```typescript
+const v = new Vec(23, 47)
+v.snapToGrid(10) // Vec(20, 50)
+```
+
+### equals
+
+```typescript
+vec.equals(other: VecLike): boolean
+vec.equalsXY(x: number, y: number): boolean
+```
+
+Checks if vectors are approximately equal (within 0.0001 tolerance).
+
+### toFixed
+
+```typescript
+vec.toFixed(): Vec
+```
+
+Rounds coordinates to two decimal places. Returns the vector for chaining.
+
+### toJson
+
+```typescript
+vec.toJson(): VecModel
+```
+
+Converts to a plain object `{ x, y, z }`.
+
+### toArray
+
+```typescript
+vec.toArray(): number[]
+```
+
+Converts to an array `[x, y, z]`.
+
+### toString
+
+```typescript
+vec.toString(): string
+```
+
+Converts to a string representation.
+
+## Static methods
+
+### Vec.Add / Vec.Sub
+
+```typescript
+Vec.Add(a: VecLike, b: VecLike): Vec
+Vec.Sub(a: VecLike, b: VecLike): Vec
+```
+
+Creates a new vector from adding or subtracting two vectors.
+
+```typescript
+const sum = Vec.Add({ x: 10, y: 20 }, { x: 5, y: 10 })
+// Vec(15, 30)
+```
+
+### Vec.AddXY / Vec.SubXY
+
+```typescript
+Vec.AddXY(vec: VecLike, x: number, y: number): Vec
+Vec.SubXY(vec: VecLike, x: number, y: number): Vec
+```
+
+Creates a new vector from adding or subtracting x/y values.
+
+### Vec.Mul / Vec.Div
+
+```typescript
+Vec.Mul(vec: VecLike, scalar: number): Vec
+Vec.Div(vec: VecLike, scalar: number): Vec
+```
+
+Creates a new vector multiplied or divided by a scalar.
+
+### Vec.MulV / Vec.DivV
+
+```typescript
+Vec.MulV(a: VecLike, b: VecLike): Vec
+Vec.DivV(a: VecLike, b: VecLike): Vec
+```
+
+Component-wise multiplication or division.
+
+### Vec.Dist / Vec.Dist2
+
+```typescript
+Vec.Dist(a: VecLike, b: VecLike): number
+Vec.Dist2(a: VecLike, b: VecLike): number
+```
+
+Returns the distance between two vectors. `Dist2` returns squared distance (faster).
+
+### Vec.DistMin
+
+```typescript
+Vec.DistMin(a: VecLike, b: VecLike, minDistance: number): boolean
+```
+
+Checks if distance is less than a value (faster than calculating actual distance).
+
+### Vec.ManhattanDist
+
+```typescript
+Vec.ManhattanDist(a: VecLike, b: VecLike): number
+```
+
+Returns the Manhattan distance (sum of absolute differences).
+
+### Vec.Angle
+
+```typescript
+Vec.Angle(a: VecLike, b: VecLike): number
+```
+
+Returns the angle from point A to point B.
+
+### Vec.AngleBetween
+
+```typescript
+Vec.AngleBetween(a: VecLike, b: VecLike): number
+```
+
+Returns the smallest angle between two vectors (-π to π).
+
+### Vec.Lrp
+
+```typescript
+Vec.Lrp(a: VecLike, b: VecLike, t: number): Vec
+```
+
+Linearly interpolates between two vectors.
+
+```typescript
+const midpoint = Vec.Lrp({ x: 0, y: 0 }, { x: 100, y: 100 }, 0.5)
+// Vec(50, 50)
+```
+
+### Vec.Med
+
+```typescript
+Vec.Med(a: VecLike, b: VecLike): Vec
+```
+
+Returns the median point between two vectors.
+
+### Vec.Rot
+
+```typescript
+Vec.Rot(vec: VecLike, radians: number): Vec
+```
+
+Creates a new vector rotated around the origin.
+
+### Vec.RotWith
+
+```typescript
+Vec.RotWith(vec: VecLike, center: VecLike, radians: number): Vec
+```
+
+Creates a new vector rotated around a center point.
+
+### Vec.Uni
+
+```typescript
+Vec.Uni(vec: VecLike): Vec
+```
+
+Creates a normalized (unit length) vector.
+
+### Vec.Tan
+
+```typescript
+Vec.Tan(a: VecLike, b: VecLike): Vec
+```
+
+Returns the unit tangent vector from B to A.
+
+### Vec.Per
+
+```typescript
+Vec.Per(vec: VecLike): Vec
+```
+
+Returns the perpendicular vector.
+
+### Vec.Neg
+
+```typescript
+Vec.Neg(vec: VecLike): Vec
+```
+
+Returns the negated vector.
+
+### Vec.Abs
+
+```typescript
+Vec.Abs(vec: VecLike): Vec
+```
+
+Returns a vector with absolute component values.
+
+### Vec.Min / Vec.Max
+
+```typescript
+Vec.Min(a: VecLike, b: VecLike): Vec
+Vec.Max(a: VecLike, b: VecLike): Vec
+```
+
+Returns component-wise minimum or maximum.
+
+### Vec.From
+
+```typescript
+Vec.From(model: VecModel): Vec
+```
+
+Creates a Vec from a plain object.
+
+```typescript
+const vec = Vec.From({ x: 10, y: 20, z: 1 })
+```
+
+### Vec.FromArray
+
+```typescript
+Vec.FromArray(array: number[]): Vec
+```
+
+Creates a Vec from an array.
+
+### Vec.FromAngle
+
+```typescript
+Vec.FromAngle(radians: number, length?: number): Vec
+```
+
+Creates a vector from an angle and optional length.
+
+```typescript
+const vec = Vec.FromAngle(Math.PI / 2, 10) // Points up with length 10
+```
+
+### Vec.ToAngle
+
+```typescript
+Vec.ToAngle(vec: VecLike): number
+```
+
+Converts a vector to an angle (0 to 2π).
+
+### Vec.Dpr
+
+```typescript
+Vec.Dpr(a: VecLike, b: VecLike): number
+```
+
+Returns the dot product.
+
+### Vec.Cpr
+
+```typescript
+Vec.Cpr(a: VecLike, b: VecLike): number
+```
+
+Returns the cross product.
+
+### Vec.Len / Vec.Len2
+
+```typescript
+Vec.Len(vec: VecLike): number
+Vec.Len2(vec: VecLike): number
+```
+
+Returns the length or squared length of a vector.
+
+### Vec.Pry
+
+```typescript
+Vec.Pry(a: VecLike, b: VecLike): number
+```
+
+Returns the projection of A onto B.
+
+### Vec.NearestPointOnLineSegment
+
+```typescript
+Vec.NearestPointOnLineSegment(
+  a: VecLike,
+  b: VecLike,
+  point: VecLike,
+  clamp?: boolean
+): Vec
+```
+
+Finds the nearest point on a line segment to a given point.
+
+### Vec.DistanceToLineSegment
+
+```typescript
+Vec.DistanceToLineSegment(
+  a: VecLike,
+  b: VecLike,
+  point: VecLike,
+  clamp?: boolean
+): number
+```
+
+Returns the distance from a point to a line segment.
+
+### Vec.Snap
+
+```typescript
+Vec.Snap(vec: VecLike, step: number): Vec
+```
+
+Snaps a vector to a grid.
+
+### Vec.Cast
+
+```typescript
+Vec.Cast(vec: VecLike): Vec
+```
+
+Ensures the value is a Vec instance (returns as-is if already Vec, otherwise creates new).
+
+### Vec.Equals
+
+```typescript
+Vec.Equals(a: VecLike, b: VecLike): boolean
+```
+
+Checks if two vectors are approximately equal.
+
+### Vec.Rescale
+
+```typescript
+Vec.Rescale(vec: VecLike, length: number): Vec
+```
+
+Rescales a vector to a specific length.
+
+### Vec.ScaleWithOrigin
+
+```typescript
+Vec.ScaleWithOrigin(vec: VecLike, scale: number, origin: VecLike): Vec
+```
+
+Scales a vector relative to an origin point.
+
+### Vec.Average
+
+```typescript
+Vec.Average(vectors: VecLike[]): Vec
+```
+
+Returns the average of multiple vectors.
+
+### Vec.PointsBetween
+
+```typescript
+Vec.PointsBetween(a: VecModel, b: VecModel, steps?: number): Vec[]
+```
+
+Generates an array of interpolated points with simulated pressure.
+
+## Type definitions
+
+### VecLike
+
+```typescript
+type VecLike = Vec | VecModel
+```
+
+Accepts either a Vec instance or a plain object with x/y coordinates.
+
+### VecModel
+
+```typescript
+interface VecModel {
+  x: number
+  y: number
+  z?: number
+}
+```
+
+## Example usage
+
+```typescript
+import { Vec } from 'tldraw'
+
+// Create vectors
+const start = new Vec(0, 0)
+const end = new Vec(100, 100)
+
+// Calculate midpoint
+const mid = Vec.Lrp(start, end, 0.5)
+
+// Calculate distance
+const distance = Vec.Dist(start, end)
+
+// Normalize a vector
+const direction = Vec.Sub(end, start).uni()
+
+// Rotate around a point
+const center = new Vec(50, 50)
+const rotated = Vec.RotWith(end, center, Math.PI / 4)
+
+// Chain operations
+const result = new Vec(10, 20)
+  .mul(2)
+  .add({ x: 5, y: 10 })
+  .rot(Math.PI / 2)
+  .toFixed()
+```

@@ -1,0 +1,523 @@
+---
+title: Internationalization
+description: Add translations and support multiple languages in tldraw
+---
+
+Tldraw includes built-in support for 50+ languages and a flexible translation system that allows you to customize text and add new languages.
+
+## Supported languages
+
+Tldraw supports the following languages out of the box:
+
+<Accordion title="View all supported languages">
+  - Bahasa Indonesia (id)
+  - Bahasa Melayu (ms)
+  - Català (ca)
+  - Čeština (cs)
+  - Danish (da)
+  - Deutsch (de)
+  - English (en)
+  - Español (es)
+  - Filipino (tl)
+  - Français (fr)
+  - Galego (gl)
+  - Hrvatski (hr)
+  - Italiano (it)
+  - Magyar (hu)
+  - Nederlands (nl)
+  - Norwegian (no)
+  - Polski (pl)
+  - Português - Brasil (pt-br)
+  - Português - Europeu (pt-pt)
+  - Română (ro)
+  - Slovenščina (sl)
+  - Somali (so)
+  - Suomi (fi)
+  - Svenska (sv)
+  - Tiếng Việt (vi)
+  - Türkçe (tr)
+  - Ελληνικά (el)
+  - Русский (ru)
+  - Українська (ua)
+  - עברית (he)
+  - اردو (ur)
+  - عربي (ar)
+  - فارسی (fa)
+  - नेपाली (ne)
+  - मराठी (mr)
+  - हिन्दी (hi-in)
+  - বাংলা (bn)
+  - ਪੰਜਾਬੀ (pa)
+  - ગુજરાતી (gu-in)
+  - தமிழ் (ta)
+  - తెలుగు (te)
+  - ಕನ್ನಡ (kn)
+  - മലയാളം (ml)
+  - ภาษาไทย (th)
+  - ភាសាខ្មែរ (km-kh)
+  - 한국어 (ko-kr)
+  - 日本語 (ja)
+  - 简体中文 (zh-cn)
+  - 繁體中文 (台灣) (zh-tw)
+</Accordion>
+
+## Setting the default language
+
+The editor automatically uses the user's browser language. You can override this:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        editor.user.updateUserPreferences({ locale: 'es' })
+      }}
+    />
+  )
+}
+```
+
+## Translation overrides
+
+Customize existing translations or add new translation keys:
+
+```tsx
+import { Tldraw, TLUiOverrides } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      'action.copy': 'Copy to clipboard',
+      'action.paste': 'Paste from clipboard',
+      'menu.title': 'File',
+      'style-panel.styles': 'Styles',
+    },
+    es: {
+      'action.copy': 'Copiar al portapapeles',
+      'action.paste': 'Pegar desde el portapapeles',
+      'menu.title': 'Archivo',
+      'style-panel.styles': 'Estilos',
+    },
+  },
+}
+
+export default function App() {
+  return <Tldraw overrides={overrides} />
+}
+```
+
+## Using translations in custom components
+
+Access translated strings in your custom components:
+
+```tsx
+import { useTranslation } from 'tldraw'
+
+function CustomComponent() {
+  const msg = useTranslation()
+  
+  return (
+    <div>
+      <h1>{msg('menu.title')}</h1>
+      <button>{msg('action.copy')}</button>
+      <button>{msg('action.paste')}</button>
+    </div>
+  )
+}
+```
+
+## Adding custom translation keys
+
+Define custom translation keys for your application:
+
+```tsx
+import { Tldraw, TLUiOverrides, useTranslation } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      'my-app.welcome': 'Welcome to my app!',
+      'my-app.save': 'Save drawing',
+      'my-app.load': 'Load drawing',
+      'my-app.export': 'Export as image',
+    },
+    es: {
+      'my-app.welcome': '¡Bienvenido a mi aplicación!',
+      'my-app.save': 'Guardar dibujo',
+      'my-app.load': 'Cargar dibujo',
+      'my-app.export': 'Exportar como imagen',
+    },
+    fr: {
+      'my-app.welcome': 'Bienvenue dans mon application!',
+      'my-app.save': 'Enregistrer le dessin',
+      'my-app.load': 'Charger le dessin',
+      'my-app.export': 'Exporter en image',
+    },
+  },
+}
+
+function CustomToolbar() {
+  const msg = useTranslation()
+  
+  return (
+    <div className="custom-toolbar">
+      <h2>{msg('my-app.welcome' as any)}</h2>
+      <button>{msg('my-app.save' as any)}</button>
+      <button>{msg('my-app.load' as any)}</button>
+      <button>{msg('my-app.export' as any)}</button>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Tldraw
+      overrides={overrides}
+      components={{ TopPanel: CustomToolbar }}
+    />
+  )
+}
+```
+
+## Loading translations dynamically
+
+Load translations from external files:
+
+```tsx
+import { Tldraw, TLUiOverrides } from 'tldraw'
+import { useEffect, useState } from 'react'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  const [translations, setTranslations] = useState({})
+  
+  useEffect(() => {
+    // Load custom translations
+    fetch('/translations/custom.json')
+      .then((res) => res.json())
+      .then((data) => setTranslations(data))
+  }, [])
+  
+  const overrides: TLUiOverrides = {
+    translations,
+  }
+  
+  return <Tldraw overrides={overrides} />
+}
+```
+
+Example translation file (`/translations/custom.json`):
+
+```json
+{
+  "en": {
+    "action.copy": "Copy to clipboard",
+    "action.paste": "Paste from clipboard",
+    "my-app.welcome": "Welcome!"
+  },
+  "es": {
+    "action.copy": "Copiar al portapapeles",
+    "action.paste": "Pegar desde el portapapeles",
+    "my-app.welcome": "¡Bienvenido!"
+  }
+}
+```
+
+## Right-to-left (RTL) languages
+
+Tldraw automatically handles RTL languages like Arabic, Hebrew, Farsi, and Urdu:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        // Set to Arabic (RTL)
+        editor.user.updateUserPreferences({ locale: 'ar' })
+      }}
+    />
+  )
+}
+```
+
+The UI will automatically flip to RTL layout.
+
+## Language selector
+
+Create a language selector for users:
+
+```tsx
+import { Tldraw, useEditor, TldrawUiMenuGroup, TldrawUiMenuItem } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const LANGUAGES = [
+  { locale: 'en', label: 'English' },
+  { locale: 'es', label: 'Español' },
+  { locale: 'fr', label: 'Français' },
+  { locale: 'de', label: 'Deutsch' },
+  { locale: 'ja', label: '日本語' },
+  { locale: 'zh-cn', label: '简体中文' },
+]
+
+function LanguageMenu() {
+  const editor = useEditor()
+  const currentLocale = editor.user.getLocale()
+  
+  return (
+    <TldrawUiMenuGroup id="language">
+      {LANGUAGES.map((lang) => (
+        <TldrawUiMenuItem
+          key={lang.locale}
+          id={`lang-${lang.locale}`}
+          label={lang.label}
+          isSelected={currentLocale === lang.locale}
+          onSelect={() => {
+            editor.user.updateUserPreferences({
+              locale: lang.locale,
+            })
+          }}
+        />
+      ))}
+    </TldrawUiMenuGroup>
+  )
+}
+```
+
+## Translation best practices
+
+### Keep keys organized
+
+Use a consistent naming convention for your custom keys:
+
+```tsx
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      // Group by feature
+      'file.new': 'New',
+      'file.open': 'Open',
+      'file.save': 'Save',
+      
+      'edit.undo': 'Undo',
+      'edit.redo': 'Redo',
+      
+      'view.zoom-in': 'Zoom In',
+      'view.zoom-out': 'Zoom Out',
+    },
+  },
+}
+```
+
+### Provide context
+
+Use descriptive keys that indicate where the text appears:
+
+```tsx
+// Good
+'toolbar.button.save': 'Save'
+'dialog.title.save': 'Save Document'
+'menu.item.save-as': 'Save As...'
+
+// Less clear
+'save1': 'Save'
+'save2': 'Save Document'
+'save3': 'Save As...'
+```
+
+### Support pluralization
+
+Handle singular and plural forms:
+
+```tsx
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      'shapes.selected.one': '{count} shape selected',
+      'shapes.selected.many': '{count} shapes selected',
+    },
+    es: {
+      'shapes.selected.one': '{count} forma seleccionada',
+      'shapes.selected.many': '{count} formas seleccionadas',
+    },
+  },
+}
+```
+
+### Handle variables
+
+Use placeholders for dynamic values:
+
+```tsx
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      'export.success': 'Exported {count} shapes as {format}',
+    },
+  },
+}
+
+// In your code
+function exportShapes() {
+  const msg = useTranslation()
+  const message = msg('export.success' as any)
+    .replace('{count}', shapeCount.toString())
+    .replace('{format}', format)
+}
+```
+
+## Complete example
+
+Here's a complete example with custom translations and a language selector:
+
+```tsx
+import {
+  Tldraw,
+  TLUiOverrides,
+  DefaultMainMenu,
+  DefaultMainMenuContent,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  TldrawUiMenuSubmenu,
+  useEditor,
+  useTranslation,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const LANGUAGES = [
+  { locale: 'en', label: 'English' },
+  { locale: 'es', label: 'Español' },
+  { locale: 'fr', label: 'Français' },
+  { locale: 'de', label: 'Deutsch' },
+]
+
+const overrides: TLUiOverrides = {
+  translations: {
+    en: {
+      'app.title': 'My Drawing App',
+      'app.new': 'New Drawing',
+      'app.save': 'Save Drawing',
+      'app.export': 'Export',
+      'app.language': 'Language',
+    },
+    es: {
+      'app.title': 'Mi Aplicación de Dibujo',
+      'app.new': 'Nuevo Dibujo',
+      'app.save': 'Guardar Dibujo',
+      'app.export': 'Exportar',
+      'app.language': 'Idioma',
+    },
+    fr: {
+      'app.title': 'Mon Application de Dessin',
+      'app.new': 'Nouveau Dessin',
+      'app.save': 'Enregistrer le Dessin',
+      'app.export': 'Exporter',
+      'app.language': 'Langue',
+    },
+    de: {
+      'app.title': 'Meine Zeichen-App',
+      'app.new': 'Neue Zeichnung',
+      'app.save': 'Zeichnung Speichern',
+      'app.export': 'Exportieren',
+      'app.language': 'Sprache',
+    },
+  },
+}
+
+function CustomMainMenu() {
+  const editor = useEditor()
+  const msg = useTranslation()
+  const currentLocale = editor.user.getLocale()
+  
+  return (
+    <DefaultMainMenu>
+      <DefaultMainMenuContent />
+      
+      <TldrawUiMenuGroup id="custom">
+        <TldrawUiMenuItem
+          id="new-drawing"
+          label={msg('app.new' as any)}
+          icon="file"
+          onSelect={() => {
+            if (confirm('Clear canvas?')) {
+              editor.selectAll()
+              editor.deleteShapes(editor.getSelectedShapeIds())
+            }
+          }}
+        />
+        <TldrawUiMenuItem
+          id="save-drawing"
+          label={msg('app.save' as any)}
+          icon="save"
+          onSelect={() => {
+            // Save logic
+          }}
+        />
+      </TldrawUiMenuGroup>
+      
+      <TldrawUiMenuSubmenu
+        id="language"
+        label={msg('app.language' as any)}
+        icon="world"
+      >
+        <TldrawUiMenuGroup id="language-options">
+          {LANGUAGES.map((lang) => (
+            <TldrawUiMenuItem
+              key={lang.locale}
+              id={`lang-${lang.locale}`}
+              label={lang.label}
+              isSelected={currentLocale === lang.locale}
+              onSelect={() => {
+                editor.user.updateUserPreferences({
+                  locale: lang.locale,
+                })
+              }}
+            />
+          ))}
+        </TldrawUiMenuGroup>
+      </TldrawUiMenuSubmenu>
+    </DefaultMainMenu>
+  )
+}
+
+function CustomTopPanel() {
+  const msg = useTranslation()
+  
+  return (
+    <div style={{ padding: '8px', textAlign: 'center' }}>
+      <h1>{msg('app.title' as any)}</h1>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Tldraw
+      overrides={overrides}
+      components={{
+        MainMenu: CustomMainMenu,
+        TopPanel: CustomTopPanel,
+      }}
+    />
+  )
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="UI customization" icon="paint-brush" href="/ui/customization">
+    Learn more about customizing the UI
+  </Card>
+  
+  <Card title="Menus and toolbars" icon="wrench" href="/ui/menus-and-toolbars">
+    Customize menus and toolbars
+  </Card>
+</CardGroup>

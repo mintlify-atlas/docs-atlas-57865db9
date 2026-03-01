@@ -1,0 +1,542 @@
+---
+title: Shape geometry system
+description: Understanding Geometry2d primitives for hit testing, bounds calculation, and spatial operations
+---
+
+The geometry system provides mathematical representations of shapes for hit testing, bounds calculation, snapping, and collision detection. Every shape returns a `Geometry2d` primitive from its `getGeometry()` method.
+
+## Geometry2d primitives
+
+All geometry classes extend the abstract `Geometry2d` base class:
+
+```typescript
+abstract class Geometry2d {
+  isFilled: boolean      // Whether the interior counts for hit tests
+  isClosed: boolean      // Whether the shape forms a closed loop
+  isLabel: boolean       // Whether this is a label geometry
+  isInternal: boolean    // Whether to exclude from certain operations
+  
+  abstract getVertices(): Vec[]
+  abstract nearestPoint(point: VecLike): Vec
+  abstract getSvgPathData(): string
+}
+```
+
+### Available primitives
+
+<CardGroup cols={2}>
+  <Card title="Rectangle2d" icon="square">
+    Axis-aligned rectangles with optimized bounds calculation
+  </Card>
+  <Card title="Polygon2d" icon="draw-polygon">
+    Closed polygons with arbitrary vertices
+  </Card>
+  <Card title="Polyline2d" icon="slash">
+    Open polylines (non-closed paths)
+  </Card>
+  <Card title="Circle2d" icon="circle">
+    Perfect circles defined by center and radius
+  </Card>
+  <Card title="Ellipse2d" icon="circle">
+    Ellipses with independent width and height
+  </Card>
+  <Card title="Arc2d" icon="rainbow">
+    Circular arcs with start/end angles
+  </Card>
+  <Card title="Edge2d" icon="minus">
+    Single line segments
+  </Card>
+  <Card title="Point2d" icon="circle-dot">
+    Single points in space
+  </Card>
+  <Card title="Group2d" icon="layer-group">
+    Composite geometry containing multiple children
+  </Card>
+  <Card title="CubicBezier2d" icon="bezier-curve">
+    Cubic Bézier curves with control points
+  </Card>
+  <Card title="CubicSpline2d" icon="wave-sine">
+    Smooth splines through multiple points
+  </Card>
+</CardGroup>
+
+## Basic primitives
+
+### Rectangle2d
+
+Optimized for rectangular shapes:
+
+```typescript
+import { Rectangle2d } from 'tldraw'
+
+getGeometry(shape: MyShape) {
+  return new Rectangle2d({
+    x: 0,
+    y: 0,
+    width: shape.props.w,
+    height: shape.props.h,
+    isFilled: true,
+    isClosed: true,
+  })
+}
+```
+
+<ParamField path="x" type="number" default="0">
+  X coordinate of top-left corner
+</ParamField>
+<ParamField path="y" type="number" default="0">
+  Y coordinate of top-left corner
+</ParamField>
+<ParamField path="width" type="number" required>
+  Rectangle width
+</ParamField>
+<ParamField path="height" type="number" required>
+  Rectangle height
+</ParamField>
+<ParamField path="isFilled" type="boolean" default="false">
+  Whether interior counts for hit testing
+</ParamField>
+
+### Polygon2d
+
+For closed shapes with custom vertices:
+
+```typescript
+import { Polygon2d, Vec } from 'tldraw'
+
+getGeometry(shape: MyTriangleShape) {
+  const w = shape.props.w
+  const h = shape.props.h
+  
+  return new Polygon2d({
+    points: [
+      new Vec(w / 2, 0),      // Top
+      new Vec(w, h),          // Bottom right
+      new Vec(0, h),          // Bottom left
+    ],
+    isFilled: shape.props.fill !== 'none',
+    isClosed: true,
+  })
+}
+```
+
+<Warning>
+  Polygon2d requires at least 3 points. Use `Edge2d` for line segments.
+</Warning>
+
+### Polyline2d
+
+For open paths (non-closed):
+
+```typescript
+import { Polyline2d } from 'tldraw'
+
+getGeometry(shape: MyDrawShape) {
+  return new Polyline2d({
+    points: shape.props.segments.map(seg => new Vec(seg.x, seg.y)),
+    isFilled: false,
+    isClosed: false,  // Not a closed loop
+  })
+}
+```
+
+### Circle2d and Ellipse2d
+
+```typescript
+import { Circle2d, Ellipse2d } from 'tldraw'
+
+// Perfect circle
+const circle = new Circle2d({
+  x: 50,
+  y: 50,
+  radius: 50,
+  isFilled: true,
+})
+
+// Ellipse
+const ellipse = new Ellipse2d({
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 50,
+  isFilled: true,
+})
+```
+
+### Edge2d
+
+For single line segments:
+
+```typescript
+import { Edge2d, Vec } from 'tldraw'
+
+const edge = new Edge2d({
+  start: new Vec(0, 0),
+  end: new Vec(100, 100),
+})
+```
+
+## Composite geometry
+
+### Group2d
+
+Combine multiple geometries:
+
+```typescript
+import { Group2d, Rectangle2d, Polygon2d } from 'tldraw'
+
+getGeometry(shape: TLGeoShape) {
+  const bodyGeometry = getShapeBodyGeometry(shape)
+  const labelGeometry = new Rectangle2d({
+    x: labelBounds.x,
+    y: labelBounds.y,
+    width: labelBounds.w,
+    height: labelBounds.h,
+    isFilled: true,
+    isLabel: true,  // Mark as label geometry
+  })
+  
+  return new Group2d({
+    children: [bodyGeometry, labelGeometry],
+  })
+}
+```
+
+<Note>
+  Group2d automatically calculates combined bounds and handles hit testing across all children.
+</Note>
+
+### Filtering child geometries
+
+Use filters to control which geometries are included in operations:
+
+```typescript
+import { Geometry2dFilters } from 'tldraw'
+
+// Exclude labels from calculations
+const vertices = geometry.getVertices(Geometry2dFilters.EXCLUDE_LABELS)
+
+// Include everything
+const allVertices = geometry.getVertices(Geometry2dFilters.INCLUDE_ALL)
+
+// Custom filter
+const customVertices = geometry.getVertices({
+  includeLabels: false,
+  includeInternal: true,
+})
+```
+
+## Curved geometries
+
+### Arc2d
+
+For circular arcs:
+
+```typescript
+import { Arc2d, Vec } from 'tldraw'
+
+const arc = new Arc2d({
+  center: new Vec(50, 50),
+  start: new Vec(100, 50),
+  end: new Vec(50, 100),
+  sweepFlag: 1,      // Clockwise
+  largeArcFlag: 0,   // Small arc
+})
+```
+
+### CubicBezier2d
+
+For Bézier curves:
+
+```typescript
+import { CubicBezier2d, Vec } from 'tldraw'
+
+const bezier = new CubicBezier2d({
+  start: new Vec(0, 0),
+  cp1: new Vec(25, 50),   // First control point
+  cp2: new Vec(75, 50),   // Second control point
+  end: new Vec(100, 0),
+})
+```
+
+### CubicSpline2d
+
+For smooth curves through points:
+
+```typescript
+import { CubicSpline2d, Vec } from 'tldraw'
+
+const spline = new CubicSpline2d({
+  points: [
+    new Vec(0, 0),
+    new Vec(50, 100),
+    new Vec(100, 50),
+    new Vec(150, 0),
+  ],
+})
+```
+
+## Geometry operations
+
+### Hit testing
+
+```typescript
+// Point hit test
+const isHit = geometry.hitTestPoint(
+  { x: 50, y: 50 },
+  5,      // margin in pixels
+  true    // hitInside - whether interior counts
+)
+
+// Line segment hit test
+const hitsLine = geometry.hitTestLineSegment(
+  { x: 0, y: 0 },
+  { x: 100, y: 100 },
+  5  // distance threshold
+)
+```
+
+### Distance calculations
+
+```typescript
+// Distance to a point (negative if inside)
+const distance = geometry.distanceToPoint(
+  { x: 50, y: 50 },
+  true  // hitInside
+)
+
+// Distance to a line segment
+const distToLine = geometry.distanceToLineSegment(
+  { x: 0, y: 0 },
+  { x: 100, y: 100 }
+)
+
+// Nearest point on geometry
+const nearest = geometry.nearestPoint({ x: 50, y: 50 })
+```
+
+### Bounds and area
+
+```typescript
+// Bounding box
+const bounds = geometry.bounds  // Box { minX, minY, maxX, maxY, width, height }
+const center = geometry.center  // Vec { x, y }
+
+// Area (for closed, filled shapes)
+const area = geometry.area
+
+// Perimeter length
+const length = geometry.length
+```
+
+### Vertices and paths
+
+```typescript
+// Get vertices
+const vertices = geometry.vertices  // Vec[]
+
+// Get SVG path data
+const pathData = geometry.getSvgPathData()
+// Example: "M0,0 L100,0 L100,100 L0,100 Z"
+
+// Get simple SVG path
+const simplePath = geometry.toSimpleSvgPath()
+```
+
+## Intersections
+
+```typescript
+// Intersect with line segment
+const lineIntersections = geometry.intersectLineSegment(
+  { x: 0, y: 50 },
+  { x: 100, y: 50 }
+)  // VecLike[]
+
+// Intersect with circle
+const circleIntersections = geometry.intersectCircle(
+  { x: 50, y: 50 },  // center
+  25                 // radius
+)
+
+// Intersect with polygon
+const polyIntersections = geometry.intersectPolygon([
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  { x: 100, y: 100 },
+  { x: 0, y: 100 },
+])
+
+// Intersect with polyline (open path)
+const polylineIntersections = geometry.intersectPolyline([
+  { x: 0, y: 0 },
+  { x: 50, y: 100 },
+  { x: 100, y: 0 },
+])
+```
+
+## Overlap testing
+
+```typescript
+// Test if geometry overlaps a polygon
+const overlaps = geometry.overlapsPolygon([
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  { x: 100, y: 100 },
+  { x: 0, y: 100 },
+])
+```
+
+## Edge interpolation
+
+Find points along the geometry's edge:
+
+```typescript
+// Get point at 50% along the edge
+const midpoint = geometry.interpolateAlongEdge(0.5)
+
+// Get point at 25% along the edge
+const quarterPoint = geometry.interpolateAlongEdge(0.25)
+
+// Reverse: find position of a point along the edge
+const t = geometry.uninterpolateAlongEdge({ x: 50, y: 25 })
+// Returns 0-1 representing position along edge
+```
+
+<Tip>
+  Use `interpolateAlongEdge()` to position elements along a shape's perimeter, like arrow labels.
+</Tip>
+
+## Transformations
+
+Apply matrix transformations to geometry:
+
+```typescript
+import { Mat } from 'tldraw'
+
+// Create a rotation matrix
+const matrix = Mat.Compose(
+  Mat.Translate(50, 50),
+  Mat.Rotate(Math.PI / 4),
+  Mat.Translate(-50, -50)
+)
+
+// Transform the geometry
+const transformed = geometry.transform(matrix, {
+  isLabel: false,
+  debugColor: '#ff0000',
+})
+```
+
+<Warning>
+  Non-uniform scaling is not yet supported in transformed geometries.
+</Warning>
+
+## Custom geometry example
+
+Create a star shape:
+
+```typescript
+import { Polygon2d, Vec } from 'tldraw'
+
+function createStarGeometry(cx: number, cy: number, points: number, outerRadius: number, innerRadius: number) {
+  const vertices: Vec[] = []
+  const angleStep = (Math.PI * 2) / (points * 2)
+  
+  for (let i = 0; i < points * 2; i++) {
+    const angle = i * angleStep - Math.PI / 2
+    const radius = i % 2 === 0 ? outerRadius : innerRadius
+    vertices.push(
+      new Vec(
+        cx + Math.cos(angle) * radius,
+        cy + Math.sin(angle) * radius
+      )
+    )
+  }
+  
+  return new Polygon2d({
+    points: vertices,
+    isFilled: true,
+    isClosed: true,
+  })
+}
+
+class StarShapeUtil extends ShapeUtil<StarShape> {
+  getGeometry(shape: StarShape) {
+    return createStarGeometry(
+      shape.props.w / 2,
+      shape.props.h / 2,
+      5,  // 5 points
+      shape.props.w / 2,
+      shape.props.w / 4
+    )
+  }
+}
+```
+
+## Performance considerations
+
+<Tabs>
+  <Tab title="Caching">
+    Geometry is automatically cached by the editor:
+    
+    ```typescript
+    // This is cached - only recalculated when shape changes
+    const geometry = editor.getShapeGeometry(shape)
+    ```
+    
+    Don't create expensive geometries in `component()` or `indicator()` - use `getGeometry()` instead.
+  </Tab>
+  
+  <Tab title="Complexity">
+    Keep vertex counts reasonable:
+    
+    - **Simple shapes**: < 100 vertices
+    - **Complex shapes**: < 1000 vertices
+    - **Very complex**: Use simplified geometry for hit testing
+    
+    ```typescript
+    getGeometry(shape: ComplexShape, opts?: TLGeometryOpts) {
+      if (opts?.context === 'hit-test') {
+        // Return simplified geometry for hit testing
+        return new Rectangle2d({ /* bounds */ })
+      }
+      // Return detailed geometry for rendering
+      return detailedGeometry
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Group optimization">
+    Use filters to exclude unnecessary geometries:
+    
+    ```typescript
+    const bodyGeometry = new Rectangle2d({
+      width: 100,
+      height: 100,
+      isFilled: true,
+    })
+    
+    const debugGeometry = new Rectangle2d({
+      width: 100,
+      height: 100,
+      isInternal: true,  // Excluded by default
+      debugColor: '#ff0000',
+    })
+    
+    return new Group2d({
+      children: [bodyGeometry, debugGeometry],
+    })
+    ```
+  </Tab>
+</Tabs>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Shape rendering" icon="palette" href="/shapes/rendering">
+    Learn how to render shapes on the canvas
+  </Card>
+  <Card title="Shape interactions" icon="hand-pointer" href="/shapes/interactions">
+    Handle user interactions with shapes
+  </Card>
+</CardGroup>

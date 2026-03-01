@@ -1,0 +1,607 @@
+---
+title: Editor
+description: Core editor class for managing the infinite canvas, shapes, and user interactions
+---
+
+The `Editor` class is the heart of tldraw. It manages the infinite canvas, handles shape operations, processes user input, and maintains the application state through a reactive store.
+
+## Constructor
+
+Create a new Editor instance with the required configuration.
+
+```typescript
+const editor = new Editor({
+  store: myStore,
+  shapeUtils: [RectangleUtil, CircleUtil],
+  bindingUtils: [ArrowBindingUtil],
+  tools: [SelectTool, DrawTool],
+  getContainer: () => document.getElementById('canvas')!
+})
+```
+
+<ParamField path="options" type="TLEditorOptions" required>
+  Configuration object for the editor
+  
+  <ParamField path="store" type="TLStore" required>
+    The Store instance containing the editor's data
+  </ParamField>
+  
+  <ParamField path="shapeUtils" type="TLAnyShapeUtilConstructor[]" required>
+    Array of shape utility classes for creating and managing shapes
+  </ParamField>
+  
+  <ParamField path="bindingUtils" type="TLAnyBindingUtilConstructor[]" required>
+    Array of binding utility classes for managing shape relationships
+  </ParamField>
+  
+  <ParamField path="tools" type="TLStateNodeConstructor[]" required>
+    Array of tool classes for handling user interactions
+  </ParamField>
+  
+  <ParamField path="getContainer" type="() => HTMLElement" required>
+    Function that returns the HTML container element for the editor
+  </ParamField>
+  
+  <ParamField path="user" type="TLUser">
+    Custom user configuration
+  </ParamField>
+  
+  <ParamField path="initialState" type="string">
+    The editor's initial active tool or state node id
+  </ParamField>
+  
+  <ParamField path="autoFocus" type="boolean">
+    Whether to automatically focus the editor when it mounts
+  </ParamField>
+  
+  <ParamField path="options" type="Partial<TldrawOptions>">
+    Additional editor options including camera and text configuration
+  </ParamField>
+</ParamField>
+
+## Core properties
+
+### store
+
+```typescript
+readonly store: TLStore
+```
+
+The editor's reactive store containing all records (shapes, pages, assets, etc.).
+
+### history
+
+```typescript
+readonly history: HistoryManager<TLRecord>
+```
+
+Manager for undo/redo operations.
+
+### user
+
+```typescript
+readonly user: UserPreferencesManager
+```
+
+Manager for user preferences and settings.
+
+### inputs
+
+```typescript
+readonly inputs: InputsManager
+```
+
+Manager for tracking mouse, touch, and keyboard input state.
+
+### snaps
+
+```typescript
+readonly snaps: SnapManager
+```
+
+Manager for snapping shapes to guides and other shapes.
+
+## Shape operations
+
+### getShape
+
+Get a shape by its id.
+
+```typescript
+getShape<T extends TLShape = TLShape>(id: TLShapeId): T | undefined
+```
+
+<ParamField path="id" type="TLShapeId" required>
+  The id of the shape to get
+</ParamField>
+
+<ResponseField name="shape" type="T | undefined">
+  The shape with the given id, or undefined if not found
+</ResponseField>
+
+**Example:**
+
+```typescript
+const shape = editor.getShape('shape:abc123')
+if (shape) {
+  console.log('Shape type:', shape.type)
+}
+```
+
+### getShapes
+
+Get multiple shapes by their ids.
+
+```typescript
+getShapes(ids: TLShapeId[]): TLShape[]
+```
+
+### createShape
+
+Create a new shape.
+
+```typescript
+createShape<T extends TLShape>(partial: TLCreateShapePartial<T>): this
+```
+
+**Example:**
+
+```typescript
+editor.createShape({
+  type: 'geo',
+  x: 100,
+  y: 100,
+  props: {
+    w: 200,
+    h: 100,
+    geo: 'rectangle'
+  }
+})
+```
+
+### updateShape
+
+Update an existing shape.
+
+```typescript
+updateShape<T extends TLShape>(
+  partial: TLShapePartial<T> | null | undefined
+): this
+```
+
+**Example:**
+
+```typescript
+editor.updateShape({
+  id: 'shape:abc123',
+  x: 150,
+  y: 200
+})
+```
+
+### updateShapes
+
+Update multiple shapes.
+
+```typescript
+updateShapes<T extends TLShape>(partials: (TLShapePartial<T> | null | undefined)[]): this
+```
+
+### deleteShape
+
+Delete a shape by its id.
+
+```typescript
+deleteShape(id: TLShapeId): this
+```
+
+### deleteShapes
+
+Delete multiple shapes.
+
+```typescript
+deleteShapes(ids: TLShapeId[]): this
+```
+
+### getShapeUtil
+
+Get the shape utility for a given shape type.
+
+```typescript
+getShapeUtil<S extends TLShape>(shape: S | TLShapePartial<S> | S['type']): ShapeUtil<S>
+```
+
+## Selection
+
+### getSelectedShapes
+
+Get all currently selected shapes.
+
+```typescript
+getSelectedShapes(): TLShape[]
+```
+
+<ResponseField name="shapes" type="TLShape[]">
+  Array of selected shapes
+</ResponseField>
+
+### getSelectedShapeIds
+
+Get the ids of all selected shapes.
+
+```typescript
+getSelectedShapeIds(): TLShapeId[]
+```
+
+### setSelectedShapes
+
+Set the selected shapes.
+
+```typescript
+setSelectedShapes(shapes: TLShapeId[] | TLShape[]): this
+```
+
+**Example:**
+
+```typescript
+// Select by ids
+editor.setSelectedShapes(['shape:abc', 'shape:def'])
+
+// Select by shapes
+const shapes = editor.getShapesOnPage()
+editor.setSelectedShapes(shapes.slice(0, 2))
+```
+
+### select
+
+Select one or more shapes.
+
+```typescript
+select(...shapes: TLShapeId[] | TLShape[]): this
+```
+
+### selectAll
+
+Select all shapes on the current page.
+
+```typescript
+selectAll(): this
+```
+
+### selectNone
+
+Clear the selection.
+
+```typescript
+selectNone(): this
+```
+
+### getSelectionPageBounds
+
+Get the bounding box of the current selection.
+
+```typescript
+getSelectionPageBounds(): Box | null
+```
+
+## History operations
+
+### undo
+
+Undo to the last mark.
+
+```typescript
+undo(): this
+```
+
+### redo
+
+Redo to the next mark.
+
+```typescript
+redo(): this
+```
+
+### canUndo
+
+Check if undo is available.
+
+```typescript
+canUndo(): boolean
+```
+
+### canRedo
+
+Check if redo is available.
+
+```typescript
+canRedo(): boolean
+```
+
+### markHistoryStoppingPoint
+
+Create a new mark in the undo/redo history.
+
+```typescript
+markHistoryStoppingPoint(name?: string): string
+```
+
+<ParamField path="name" type="string">
+  Optional name for the mark (useful for debugging)
+</ParamField>
+
+<ResponseField name="markId" type="string">
+  Unique id for the mark that can be used with squashToMark or bailToMark
+</ResponseField>
+
+**Example:**
+
+```typescript
+const mark = editor.markHistoryStoppingPoint('before rotation')
+editor.rotateShapes(selectedShapes, Math.PI / 4)
+// If needed, can bail back to the mark
+// editor.bailToMark(mark)
+```
+
+### run
+
+Run a function in a transaction with optional history control.
+
+```typescript
+run(fn: () => void, opts?: TLEditorRunOptions): this
+```
+
+<ParamField path="fn" type="() => void" required>
+  The callback function to run
+</ParamField>
+
+<ParamField path="opts" type="TLEditorRunOptions">
+  Options for the transaction
+  
+  <ParamField path="history" type="'record' | 'record-preserveRedoStack' | 'ignore'">
+    How to handle history for this transaction
+  </ParamField>
+  
+  <ParamField path="ignoreShapeLock" type="boolean">
+    Whether to allow changes to locked shapes
+  </ParamField>
+</ParamField>
+
+**Example:**
+
+```typescript
+// Update without adding to history
+editor.run(() => {
+  editor.updateShape({ id: myShape.id, x: 100 })
+}, { history: 'ignore' })
+
+// Force changes to locked shapes
+editor.run(() => {
+  editor.deleteShape(lockedShape.id)
+}, { ignoreShapeLock: true })
+```
+
+## Camera operations
+
+### getCamera
+
+Get the current camera state.
+
+```typescript
+getCamera(): TLCamera
+```
+
+### setCamera
+
+Set the camera position and zoom.
+
+```typescript
+setCamera(point: VecLike, options?: TLCameraMoveOptions): this
+```
+
+### zoomIn
+
+Zoom in the camera.
+
+```typescript
+zoomIn(point?: VecLike, options?: TLCameraMoveOptions): this
+```
+
+### zoomOut
+
+Zoom out the camera.
+
+```typescript
+zoomOut(point?: VecLike, options?: TLCameraMoveOptions): this
+```
+
+### zoomToFit
+
+Zoom to fit all shapes on the current page.
+
+```typescript
+zoomToFit(options?: TLCameraMoveOptions): this
+```
+
+### zoomToSelection
+
+Zoom to fit the current selection.
+
+```typescript
+zoomToSelection(options?: TLCameraMoveOptions): this
+```
+
+## Page operations
+
+### getCurrentPage
+
+Get the current page.
+
+```typescript
+getCurrentPage(): TLPage
+```
+
+### getCurrentPageId
+
+Get the current page id.
+
+```typescript
+getCurrentPageId(): TLPageId
+```
+
+### setCurrentPage
+
+Set the current page.
+
+```typescript
+setCurrentPage(page: TLPageId | TLPage): this
+```
+
+### getPages
+
+Get all pages.
+
+```typescript
+getPages(): TLPage[]
+```
+
+### createPage
+
+Create a new page.
+
+```typescript
+createPage(options?: { name?: string, id?: TLPageId }): this
+```
+
+### deletePage
+
+Delete a page.
+
+```typescript
+deletePage(page: TLPageId | TLPage): this
+```
+
+## State and tools
+
+### getCurrentTool
+
+Get the current active tool.
+
+```typescript
+getCurrentTool(): StateNode
+```
+
+### getCurrentToolId
+
+Get the current active tool's id.
+
+```typescript
+getCurrentToolId(): string
+```
+
+### setCurrentTool
+
+Set the active tool.
+
+```typescript
+setCurrentTool(id: string, info?: {}): this
+```
+
+**Example:**
+
+```typescript
+editor.setCurrentTool('select')
+editor.setCurrentTool('draw', { date: Date.now() })
+```
+
+### getPath
+
+Get the current path of active states.
+
+```typescript
+getPath(): string
+```
+
+<ResponseField name="path" type="string">
+  Path of active states separated by periods (e.g., "select.idle" or "draw.drawing")
+</ResponseField>
+
+### isIn
+
+Check if the editor is in a specific state.
+
+```typescript
+isIn(path: string): boolean
+```
+
+**Example:**
+
+```typescript
+if (editor.isIn('select.brushing')) {
+  console.log('User is brush selecting')
+}
+```
+
+## Editing
+
+### getEditingShape
+
+Get the shape currently being edited.
+
+```typescript
+getEditingShape(): TLShape | undefined
+```
+
+### getEditingShapeId
+
+Get the id of the shape currently being edited.
+
+```typescript
+getEditingShapeId(): TLShapeId | null
+```
+
+### setEditingShape
+
+Set the shape to edit.
+
+```typescript
+setEditingShape(shape: TLShapeId | TLShape | null): this
+```
+
+## Events
+
+The Editor extends EventEmitter and emits various events:
+
+```typescript
+// Listen to all changes
+editor.on('change', (changes) => {
+  console.log('Store changed:', changes)
+})
+
+// Listen to editor updates
+editor.on('update', () => {
+  console.log('Editor updated')
+})
+
+// Listen to tick events
+editor.on('tick', (elapsed) => {
+  console.log('Tick:', elapsed, 'ms')
+})
+```
+
+## Lifecycle
+
+### dispose
+
+Dispose of the editor and clean up resources.
+
+```typescript
+dispose(): void
+```
+
+**Example:**
+
+```typescript
+// When unmounting
+editor.dispose()
+```

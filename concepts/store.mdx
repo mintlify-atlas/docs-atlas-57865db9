@@ -1,0 +1,558 @@
+---
+title: Store
+description: The Store is tldraw's reactive state management system, providing a client-side database with automatic updates, persistence, and time-travel capabilities.
+---
+
+The Store is a reactive, in-memory database that manages all of tldraw's state. It stores shapes, pages, bindings, and other records, automatically notifying components when data changes.
+
+## Overview
+
+The Store provides:
+
+- **Reactive updates**: Components automatically re-render when data changes
+- **Schemas**: Type-safe record definitions with validation
+- **Persistence**: Automatic saving to IndexedDB
+- **History**: Undo/redo with time-travel
+- **Computed values**: Derived data with automatic dependency tracking
+- **Listeners**: React to specific changes
+- **Migrations**: Handle schema changes over time
+
+## Store architecture
+
+### Records
+
+Everything in the store is a record:
+
+```tsx
+import { TLShape, TLPage, TLBinding, TLAsset } from '@tldraw/tlschema'
+
+// Shape records
+const shape: TLShape = {
+  id: 'shape:abc123',
+  type: 'geo',
+  x: 100,
+  y: 100,
+  rotation: 0,
+  props: {
+    w: 200,
+    h: 100,
+    geo: 'rectangle',
+    color: 'blue'
+  },
+  parentId: 'page:page1',
+  index: 'a1',
+  typeName: 'shape'
+}
+
+// Page records
+const page: TLPage = {
+  id: 'page:page1',
+  name: 'Page 1',
+  index: 'a1',
+  typeName: 'page'
+}
+
+// Binding records
+const binding: TLBinding = {
+  id: 'binding:xyz789',
+  type: 'arrow',
+  fromId: 'shape:arrow1',
+  toId: 'shape:box1',
+  props: { /* binding-specific props */ },
+  typeName: 'binding'
+}
+```
+
+### Store instance
+
+The Editor holds a reference to the store:
+
+```tsx
+import { Editor } from '@tldraw/editor'
+
+const editor = new Editor({ /* ... */ })
+
+// Access the store
+const store = editor.store
+
+// Get a record
+const shape = store.get('shape:abc123')
+
+// Get all records of a type
+const allShapes = store.allRecords().filter(r => r.typeName === 'shape')
+
+// Listen to changes
+store.listen((entry) => {
+  console.log('Changes:', entry.changes)
+})
+```
+
+## Working with records
+
+### Reading records
+
+```tsx
+// Get by ID
+const shape = editor.store.get('shape:abc123')
+
+// Get multiple records
+const shapes = ['shape:1', 'shape:2', 'shape:3']
+  .map(id => editor.store.get(id))
+  .filter(Boolean)
+
+// Query all records
+const allRecords = editor.store.allRecords()
+
+// Filter by type
+const shapes = editor.store.allRecords()
+  .filter(r => r.typeName === 'shape')
+
+// Use helper methods
+const shape = editor.getShape('shape:abc123')
+const shapes = editor.getCurrentPageShapes()
+```
+
+### Creating records
+
+```tsx
+import { createShapeId } from '@tldraw/editor'
+
+// Create a shape
+const id = createShapeId()
+
+editor.store.put([{
+  id,
+  type: 'geo',
+  x: 100,
+  y: 100,
+  rotation: 0,
+  props: {
+    w: 200,
+    h: 100,
+    geo: 'rectangle'
+  },
+  parentId: editor.getCurrentPageId(),
+  index: 'a1',
+  typeName: 'shape'
+}])
+
+// Or use Editor convenience method
+editor.createShape({
+  type: 'geo',
+  x: 100,
+  y: 100,
+  props: { w: 200, h: 100, geo: 'rectangle' }
+})
+```
+
+### Updating records
+
+```tsx
+// Update using store
+const shape = editor.store.get('shape:abc123')
+if (shape) {
+  editor.store.put([{
+    ...shape,
+    x: 200,
+    y: 200
+  }])
+}
+
+// Or use Editor method
+editor.updateShape({
+  id: 'shape:abc123',
+  type: 'geo',
+  x: 200,
+  y: 200
+})
+
+// Batch updates
+editor.store.put([
+  { ...shape1, x: 100 },
+  { ...shape2, x: 200 },
+  { ...shape3, x: 300 }
+])
+```
+
+### Deleting records
+
+```tsx
+// Delete using store
+editor.store.remove(['shape:abc123', 'shape:def456'])
+
+// Or use Editor method
+editor.deleteShapes(['shape:abc123', 'shape:def456'])
+```
+
+## Reactivity
+
+The Store uses reactive signals from `@tldraw/state`:
+
+### Using in React components
+
+```tsx
+import { useValue } from '@tldraw/state-react'
+import { useEditor } from '@tldraw/editor'
+
+function ShapeList() {
+  const editor = useEditor()
+  
+  // Automatically re-render when shapes change
+  const shapes = useValue(
+    'shapes',
+    () => editor.getCurrentPageShapes(),
+    [editor]
+  )
+  
+  return (
+    <ul>
+      {shapes.map(shape => (
+        <li key={shape.id}>{shape.type} at ({shape.x}, {shape.y})</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Computed values
+
+Create derived data that updates automatically:
+
+```tsx
+import { computed } from '@tldraw/state'
+
+const selectedBounds = computed('selected bounds', () => {
+  const shapes = editor.getSelectedShapes()
+  if (shapes.length === 0) return null
+  
+  return Box.Common(shapes.map(s => editor.getShapePageBounds(s)))
+})
+
+// Get the value
+const bounds = selectedBounds.get()
+
+// Use in React
+function SelectionInfo() {
+  const bounds = useValue(selectedBounds)
+  
+  if (!bounds) return null
+  
+  return <div>Selection: {bounds.width} × {bounds.height}</div>
+}
+```
+
+### Atoms
+
+Create reactive state:
+
+```tsx
+import { atom } from '@tldraw/state'
+
+const hoveredShapeId = atom<string | null>('hovered', null)
+
+// Set value
+hoveredShapeId.set('shape:abc123')
+
+// Get value
+const id = hoveredShapeId.get()
+
+// Use in React
+function HoverIndicator() {
+  const id = useValue(hoveredShapeId)
+  
+  if (!id) return null
+  
+  const shape = editor.getShape(id)
+  return <div>Hovering: {shape?.type}</div>
+}
+```
+
+## Store listeners
+
+React to changes in the store:
+
+```tsx
+// Listen to all changes
+const unlisten = editor.store.listen((entry) => {
+  const { changes, source } = entry
+  
+  // source: 'user' | 'remote'
+  console.log('Source:', source)
+  
+  // Added records
+  for (const record of Object.values(changes.added)) {
+    console.log('Added:', record)
+  }
+  
+  // Updated records
+  for (const [from, to] of Object.values(changes.updated)) {
+    console.log('Updated:', from.id, 'from', from, 'to', to)
+  }
+  
+  // Removed records
+  for (const record of Object.values(changes.removed)) {
+    console.log('Removed:', record)
+  }
+})
+
+// Stop listening
+unlisten()
+```
+
+### Filtered listeners
+
+```tsx
+// Listen only to shape changes
+const unlisten = editor.store.listen((entry) => {
+  const shapeChanges = Object.values(entry.changes.added)
+    .concat(Object.values(entry.changes.updated).map(([_, to]) => to))
+    .filter(r => r.typeName === 'shape')
+  
+  if (shapeChanges.length > 0) {
+    console.log('Shapes changed:', shapeChanges)
+  }
+})
+```
+
+### Side effects
+
+Run code when specific records change:
+
+```tsx
+import { react } from '@tldraw/state'
+
+// React to selection changes
+const dispose = react('selection changed', () => {
+  const selectedIds = editor.getSelectedShapeIds()
+  console.log('Selection:', selectedIds)
+  
+  // This will automatically re-run when selection changes
+})
+
+// Clean up
+dispose()
+```
+
+## Computed cache
+
+Cache expensive computations per shape:
+
+```tsx
+// Create a computed cache
+const boundsCache = editor.store.createComputedCache(
+  'shape bounds',
+  (shape: TLShape) => {
+    return editor.getShapePageBounds(shape)
+  }
+)
+
+// Get cached value
+const bounds = boundsCache.get(shape.id)
+
+// Cache is automatically invalidated when shape changes
+```
+
+## History and transactions
+
+### Undo/redo
+
+```tsx
+// Undo
+editor.undo()
+
+// Redo
+editor.redo()
+
+// Check availability
+const canUndo = editor.getCanUndo()
+const canRedo = editor.getCanRedo()
+
+// Clear history
+editor.history.clear()
+```
+
+### Transactions
+
+Group operations into a single history entry:
+
+```tsx
+// Create a mark for history
+editor.mark('create shapes')
+
+// Make changes
+editor.createShape({ type: 'geo', x: 0, y: 0 })
+editor.createShape({ type: 'geo', x: 100, y: 100 })
+
+// Single undo will undo both creates
+
+// Or use run() for atomic operations
+editor.run(
+  () => {
+    editor.createShape({ type: 'geo', x: 0, y: 0 })
+    editor.createShape({ type: 'geo', x: 100, y: 100 })
+  },
+  { history: 'record' }
+)
+```
+
+### History options
+
+```tsx
+// Record in history (default)
+editor.run(() => { /* changes */ }, { 
+  history: 'record' 
+})
+
+// Ignore history
+editor.run(() => { /* changes */ }, { 
+  history: 'ignore' 
+})
+
+// Record but preserve redo stack
+editor.run(() => { /* changes */ }, { 
+  history: 'record-preserveRedoStack' 
+})
+```
+
+## Persistence
+
+### Snapshots
+
+Save and restore store state:
+
+```tsx
+import { getSnapshot, loadSnapshot } from '@tldraw/editor'
+
+// Get snapshot
+const snapshot = getSnapshot(editor.store)
+
+// Save to localStorage
+localStorage.setItem('tldraw-doc', JSON.stringify(snapshot))
+
+// Load snapshot
+const savedSnapshot = JSON.parse(localStorage.getItem('tldraw-doc')!)
+loadSnapshot(editor.store, savedSnapshot)
+```
+
+### Auto-persistence
+
+tldraw automatically persists to IndexedDB:
+
+```tsx
+import { Tldraw, createTLStore, defaultShapeUtils } from 'tldraw'
+
+function App() {
+  const [store] = useState(() => {
+    return createTLStore({
+      shapeUtils: defaultShapeUtils,
+      // Persist to IndexedDB with this ID
+      persistenceKey: 'my-tldraw-app'
+    })
+  })
+  
+  return <Tldraw store={store} />
+}
+```
+
+### Custom persistence
+
+Implement your own persistence:
+
+```tsx
+const store = createTLStore({ shapeUtils: [...] })
+
+// Listen and save changes
+store.listen((entry) => {
+  const snapshot = getSnapshot(store)
+  
+  // Save to your backend
+  fetch('/api/save', {
+    method: 'POST',
+    body: JSON.stringify(snapshot)
+  })
+})
+
+// Load from backend
+fetch('/api/load')
+  .then(res => res.json())
+  .then(snapshot => loadSnapshot(store, snapshot))
+```
+
+## Schema and migrations
+
+### Defining schemas
+
+```tsx
+import { T } from '@tldraw/editor'
+
+const myShapeProps = {
+  w: T.number,
+  h: T.number,
+  color: T.string,
+  text: T.string
+}
+```
+
+### Migrations
+
+Handle schema changes over time:
+
+```tsx
+const myShapeMigrations = {
+  currentVersion: 2,
+  migrators: {
+    1: {
+      up(shape: any) {
+        // Migrate from v0 to v1
+        return { ...shape, color: shape.fill || 'black' }
+      },
+      down(shape: any) {
+        // Downgrade from v1 to v0
+        const { color, ...rest } = shape
+        return { ...rest, fill: color }
+      }
+    },
+    2: {
+      up(shape: any) {
+        // Migrate from v1 to v2
+        return { ...shape, opacity: 1 }
+      },
+      down(shape: any) {
+        // Downgrade from v2 to v1
+        const { opacity, ...rest } = shape
+        return rest
+      }
+    }
+  }
+}
+
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  static override props = myShapeProps
+  static override migrations = myShapeMigrations
+}
+```
+
+## Best practices
+
+<Note>
+**Use Editor methods**: Prefer `editor.createShape()` over direct store access for most operations. The Editor handles validation and side effects.
+</Note>
+
+<Note>
+**Batch updates**: Use `editor.run()` or `store.put()` with multiple records to batch updates and avoid unnecessary re-renders.
+</Note>
+
+<Info>
+**Reactivity**: Use `useValue()` in React components to automatically subscribe to store changes.
+</Info>
+
+<Note>
+**Transactions**: Wrap related operations in `editor.run()` to create atomic undo/redo entries.
+</Note>
+
+## Related
+
+- [Editor](/concepts/editor) - Working with the Editor API
+- [Shapes](/concepts/shapes) - Understanding shape records
+- [Persistence](/essentials/persistence) - Saving and loading data
+- [Store API](/api-reference/store) - Complete store API reference

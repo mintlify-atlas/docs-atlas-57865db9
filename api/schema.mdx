@@ -1,0 +1,480 @@
+---
+title: Schema and types
+description: Type definitions and schema creation for tldraw
+---
+
+The schema system in tldraw defines the structure, validation, and migration of all data in the editor. It ensures type safety and data consistency across versions.
+
+## Creating a schema
+
+### createTLSchema
+
+Create a complete tldraw schema with shapes and bindings.
+
+```typescript
+import { createTLSchema, defaultShapeSchemas, defaultBindingSchemas } from '@tldraw/tlschema'
+
+const schema = createTLSchema({
+  shapes: defaultShapeSchemas,
+  bindings: defaultBindingSchemas
+})
+```
+
+<ParamField path="options" type="object">
+  Configuration options for the schema
+  
+  <ParamField path="shapes" type="Record<string, SchemaPropsInfo>">
+    Shape schema configurations. Defaults to defaultShapeSchemas if not provided.
+  </ParamField>
+  
+  <ParamField path="bindings" type="Record<string, SchemaPropsInfo>">
+    Binding schema configurations. Defaults to defaultBindingSchemas if not provided.
+  </ParamField>
+</ParamField>
+
+<ResponseField name="schema" type="TLSchema">
+  A complete schema ready for use with Store or Editor
+</ResponseField>
+
+### Custom shapes schema
+
+```typescript
+import { createTLSchema, defaultShapeSchemas } from '@tldraw/tlschema'
+import { MyCustomShapeUtil } from './MyCustomShape'
+
+const schema = createTLSchema({
+  shapes: {
+    ...defaultShapeSchemas,
+    myCustomShape: {
+      props: MyCustomShapeUtil.props,
+      migrations: MyCustomShapeUtil.migrations
+    }
+  }
+})
+```
+
+## Default schemas
+
+### defaultShapeSchemas
+
+Pre-configured schemas for all built-in tldraw shapes.
+
+```typescript
+import { defaultShapeSchemas } from '@tldraw/tlschema'
+
+console.log(Object.keys(defaultShapeSchemas))
+// ['arrow', 'bookmark', 'draw', 'embed', 'frame', 'geo', 
+//  'group', 'highlight', 'image', 'line', 'note', 'text', 'video']
+```
+
+Each shape schema includes:
+- **props** - Validation schema for shape properties
+- **migrations** - Migration sequences for data evolution
+
+**Available shapes:**
+
+- **arrow** - Directional lines that can bind to other shapes
+- **bookmark** - Website bookmark cards with preview information
+- **draw** - Freehand drawing paths
+- **embed** - Embedded content (YouTube, Figma, etc.)
+- **frame** - Container shapes for organizing content
+- **geo** - Geometric shapes (rectangles, ellipses, triangles, etc.)
+- **group** - Logical groupings of shapes
+- **highlight** - Highlighting strokes
+- **image** - Raster images
+- **line** - Multi-point lines and splines
+- **note** - Sticky notes with text
+- **text** - Rich text shapes
+- **video** - Video shapes
+
+### defaultBindingSchemas
+
+Pre-configured schemas for built-in bindings.
+
+```typescript
+import { defaultBindingSchemas } from '@tldraw/tlschema'
+
+console.log(Object.keys(defaultBindingSchemas))
+// ['arrow']
+```
+
+**Available bindings:**
+
+- **arrow** - Connects arrow shapes to other shapes
+
+## Core types
+
+### TLShape
+
+Base interface for all shapes.
+
+```typescript
+interface TLShape extends BaseRecord {
+  typeName: 'shape'
+  type: string
+  x: number
+  y: number
+  rotation: number
+  index: string
+  parentId: TLParentId
+  isLocked: boolean
+  opacity: number
+  props: object
+  meta: object
+}
+```
+
+### Common shape types
+
+#### TLGeoShape
+
+Geometric shapes like rectangles, ellipses, and triangles.
+
+```typescript
+interface TLGeoShape extends TLBaseShape<'geo', TLGeoShapeProps> {
+  type: 'geo'
+  props: {
+    geo: 'rectangle' | 'ellipse' | 'triangle' | 'diamond' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'rhombus' | 'cloud' | 'trapezoid' | 'arrow-right' | 'arrow-left' | 'arrow-up' | 'arrow-down' | 'x-box' | 'check-box'
+    w: number
+    h: number
+    color: TLColorType
+    fill: TLFillType
+    dash: TLDashType
+    size: TLSizeType
+    text: string
+  }
+}
+```
+
+#### TLArrowShape
+
+Arrow shapes that can bind to other shapes.
+
+```typescript
+interface TLArrowShape extends TLBaseShape<'arrow', TLArrowShapeProps> {
+  type: 'arrow'
+  props: {
+    color: TLColorType
+    fill: TLFillType
+    dash: TLDashType
+    size: TLSizeType
+    arrowheadStart: TLArrowheadType
+    arrowheadEnd: TLArrowheadType
+    start: VecModel
+    end: VecModel
+    bend: number
+    text: string
+  }
+}
+```
+
+#### TLTextShape
+
+Rich text shapes.
+
+```typescript
+interface TLTextShape extends TLBaseShape<'text', TLTextShapeProps> {
+  type: 'text'
+  props: {
+    color: TLColorType
+    size: TLSizeType
+    font: TLFontType
+    textAlign: TLTextAlignType
+    w: number
+    text: string
+    scale: number
+    autoSize: boolean
+  }
+}
+```
+
+### TLBinding
+
+Represents a relationship between shapes.
+
+```typescript
+interface TLBinding extends BaseRecord {
+  typeName: 'binding'
+  type: string
+  fromId: TLShapeId
+  toId: TLShapeId
+  props: object
+  meta: object
+}
+```
+
+### TLArrowBinding
+
+Binds arrow shapes to other shapes.
+
+```typescript
+interface TLArrowBinding extends TLBaseBinding<'arrow', TLArrowBindingProps> {
+  type: 'arrow'
+  props: {
+    terminal: 'start' | 'end'
+    normalizedAnchor: VecModel
+    isExact: boolean
+    isPrecise: boolean
+  }
+}
+```
+
+### Other core types
+
+#### TLPage
+
+Represents a page in the document.
+
+```typescript
+interface TLPage extends BaseRecord {
+  typeName: 'page'
+  name: string
+  index: string
+  meta: object
+}
+```
+
+#### TLAsset
+
+Represents an uploaded asset.
+
+```typescript
+type TLAsset = TLImageAsset | TLVideoAsset | TLBookmarkAsset
+
+interface TLImageAsset extends BaseRecord {
+  typeName: 'asset'
+  type: 'image'
+  props: {
+    w: number
+    h: number
+    name: string
+    src: string
+    mimeType: string
+    isAnimated: boolean
+  }
+}
+```
+
+#### TLCamera
+
+Represents the viewport camera.
+
+```typescript
+interface TLCamera extends BaseRecord {
+  typeName: 'camera'
+  x: number
+  y: number
+  z: number // zoom level
+  meta: object
+}
+```
+
+## Style properties
+
+Style properties are shared across shapes for consistency.
+
+### TLColorStyle
+
+```typescript
+const colorStyle = StyleProp.defineEnum('tldraw:color', {
+  values: ['black', 'grey', 'light-violet', 'violet', 'blue', 'light-blue', 
+           'yellow', 'orange', 'green', 'light-green', 'light-red', 'red'],
+  defaultValue: 'black'
+})
+```
+
+### TLSizeStyle
+
+```typescript
+const sizeStyle = StyleProp.defineEnum('tldraw:size', {
+  values: ['s', 'm', 'l', 'xl'],
+  defaultValue: 'm'
+})
+```
+
+### TLDashStyle
+
+```typescript
+const dashStyle = StyleProp.defineEnum('tldraw:dash', {
+  values: ['draw', 'solid', 'dashed', 'dotted'],
+  defaultValue: 'draw'
+})
+```
+
+### TLFillStyle
+
+```typescript
+const fillStyle = StyleProp.defineEnum('tldraw:fill', {
+  values: ['none', 'semi', 'solid', 'pattern'],
+  defaultValue: 'none'
+})
+```
+
+### TLFontStyle
+
+```typescript
+const fontStyle = StyleProp.defineEnum('tldraw:font', {
+  values: ['draw', 'sans', 'serif', 'mono'],
+  defaultValue: 'draw'
+})
+```
+
+## Record types
+
+### Creating record types
+
+```typescript
+import { RecordType } from '@tldraw/store'
+
+const BookRecord = new RecordType<Book>('book', {
+  scope: 'document',
+  createDefaultProperties: () => ({
+    title: '',
+    author: '',
+    inStock: true
+  })
+})
+```
+
+<ParamField path="typeName" type="string" required>
+  The unique type name for records
+</ParamField>
+
+<ParamField path="config" type="object" required>
+  Configuration for the record type
+  
+  <ParamField path="createDefaultProperties" type="() => object" required>
+    Function returning default properties for new records
+  </ParamField>
+  
+  <ParamField path="scope" type="'document' | 'session' | 'presence'">
+    Record scope determining persistence behavior. Defaults to 'document'.
+    
+    - **document** - Persisted and synced to all users
+    - **session** - Local to this instance, not synced
+    - **presence** - Synced but not persisted (like cursor positions)
+  </ParamField>
+  
+  <ParamField path="validator" type="StoreValidator<R>">
+    Optional validator for record validation
+  </ParamField>
+</ParamField>
+
+### Record operations
+
+```typescript
+// Create a record
+const book = BookRecord.create({
+  title: 'The Lathe of Heaven',
+  author: 'Ursula K. Le Guin'
+})
+// { id: 'book:abc123', typeName: 'book', title: '...', author: '...', inStock: true }
+
+// Create with custom id
+const bookWithId = BookRecord.create({
+  id: BookRecord.createId('custom-id'),
+  title: 'The Left Hand of Darkness'
+})
+// { id: 'book:custom-id', ... }
+
+// Clone a record
+const duplicate = BookRecord.clone(book)
+// New record with same properties but different id
+```
+
+## Migrations
+
+### Defining migrations
+
+Migrations allow you to evolve your data schema over time.
+
+```typescript
+import { createMigrationSequence } from '@tldraw/store'
+
+const bookMigrations = createMigrationSequence({
+  sequenceId: 'com.myapp.book',
+  retroactive: false,
+  sequence: [
+    {
+      id: 'com.myapp.book/add-isbn',
+      scope: 'record',
+      version: 1,
+      up(book) {
+        return { ...book, isbn: '' }
+      },
+      down(book) {
+        const { isbn, ...rest } = book
+        return rest
+      }
+    },
+    {
+      id: 'com.myapp.book/add-publication-year',
+      scope: 'record',
+      version: 2,
+      up(book) {
+        return { ...book, year: 2000 }
+      },
+      down(book) {
+        const { year, ...rest } = book
+        return rest
+      }
+    }
+  ]
+})
+```
+
+### Using migrations
+
+```typescript
+const schema = StoreSchema.create({
+  book: RecordType.create('book', {
+    migrations: bookMigrations,
+    createDefaultProperties: () => ({ title: '', author: '', isbn: '', year: 2000 })
+  })
+})
+```
+
+When loading data from an older version, migrations are automatically applied:
+
+```typescript
+const oldSnapshot = {
+  store: {
+    'book:abc': { id: 'book:abc', typeName: 'book', title: '1984', author: 'Orwell' }
+  },
+  schema: { schemaVersion: 2, sequences: { 'com.myapp.book': 0 } }
+}
+
+store.loadSnapshot(oldSnapshot)
+// Book is migrated: { id: 'book:abc', ..., isbn: '', year: 2000 }
+```
+
+## Type utilities
+
+### RecordId
+
+Type-safe record id.
+
+```typescript
+type BookId = RecordId<Book>
+// 'book:string'
+```
+
+### IdOf
+
+Extract id type from a record.
+
+```typescript
+type MyBookId = IdOf<Book>
+// RecordId<Book>
+```
+
+### UnknownRecord
+
+Base type for all records.
+
+```typescript
+interface UnknownRecord {
+  id: RecordId<UnknownRecord>
+  typeName: string
+}
+```

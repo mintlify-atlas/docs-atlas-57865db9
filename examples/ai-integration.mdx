@@ -1,0 +1,419 @@
+---
+title: AI integration
+description: Integrate AI capabilities into your tldraw editor
+---
+
+You can enhance tldraw with AI capabilities like shape generation, auto-completion, image analysis, and intelligent transformations.
+
+## AI-powered shape generation
+
+Use AI to generate shapes from text descriptions:
+
+```tsx
+import { Tldraw, useEditor, createShapeId } from 'tldraw'
+import { useState } from 'react'
+import 'tldraw/tldraw.css'
+
+function AIShapeGenerator() {
+  const editor = useEditor()
+  const [prompt, setPrompt] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const generateShape = async () => {
+    setLoading(true)
+    try {
+      // Call your AI API
+      const response = await fetch('/api/generate-shape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      
+      const { shapeType, props } = await response.json()
+      
+      // Create the AI-generated shape
+      editor.createShape({
+        type: shapeType,
+        x: 100,
+        y: 100,
+        props,
+      })
+      
+      setPrompt('')
+    } catch (error) {
+      console.error('Failed to generate shape:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000 }}>
+      <input
+        type="text"
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="Describe a shape..."
+        style={{ padding: 8, marginRight: 8 }}
+      />
+      <button onClick={generateShape} disabled={loading}>
+        {loading ? 'Generating...' : 'Generate'}
+      </button>
+    </div>
+  )
+}
+
+export default function AIIntegrationExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <AIShapeGenerator />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Image-to-diagram conversion
+
+Convert uploaded images to editable diagrams using AI vision models:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function ImageToDiagram() {
+  const editor = useEditor()
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append('image', file)
+
+    try {
+      // Call AI vision API to extract diagram elements
+      const response = await fetch('/api/analyze-diagram', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const { shapes } = await response.json()
+
+      // Create shapes from AI analysis
+      editor.createShapes(shapes.map((shape: any) => ({
+        type: shape.type,
+        x: shape.x,
+        y: shape.y,
+        props: shape.props,
+      })))
+    } catch (error) {
+      console.error('Failed to analyze image:', error)
+    }
+  }
+
+  return (
+    <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000 }}>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        style={{ padding: 8 }}
+      />
+    </div>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <ImageToDiagram />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Smart auto-complete
+
+Implement AI-powered auto-complete for drawing:
+
+```tsx
+import { Tldraw, useEditor, track } from 'tldraw'
+import { useEffect } from 'react'
+import 'tldraw/tldraw.css'
+
+const AutoCompleteAI = track(() => {
+  const editor = useEditor()
+
+  useEffect(() => {
+    const handleSelectionChange = async () => {
+      const selectedShapes = editor.getSelectedShapes()
+      
+      if (selectedShapes.length === 1 && selectedShapes[0].type === 'draw') {
+        const shape = selectedShapes[0]
+        
+        // Send drawing points to AI for completion suggestion
+        const response = await fetch('/api/complete-drawing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            points: shape.props.segments,
+          }),
+        })
+
+        const { completedPoints } = await response.json()
+        
+        // Show completion as a preview
+        // User can accept or reject
+      }
+    }
+
+    const dispose = editor.store.listen(handleSelectionChange)
+    return dispose
+  }, [editor])
+
+  return null
+})
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <AutoCompleteAI />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Natural language commands
+
+Enable users to control the editor with natural language:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import { useState } from 'react'
+import 'tldraw/tldraw.css'
+
+function NaturalLanguageCommands() {
+  const editor = useEditor()
+  const [command, setCommand] = useState('')
+
+  const executeCommand = async () => {
+    try {
+      // Send command to AI to interpret
+      const response = await fetch('/api/parse-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command }),
+      })
+
+      const { action, params } = await response.json()
+
+      // Execute the interpreted action
+      switch (action) {
+        case 'create':
+          editor.createShape(params)
+          break
+        case 'delete':
+          editor.deleteShapes(params.shapeIds)
+          break
+        case 'move':
+          editor.updateShapes(params.updates)
+          break
+        case 'style':
+          editor.setStyleForSelectedShapes(params.style, params.value)
+          break
+      }
+
+      setCommand('')
+    } catch (error) {
+      console.error('Failed to execute command:', error)
+    }
+  }
+
+  return (
+    <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, zIndex: 1000 }}>
+      <input
+        type="text"
+        value={command}
+        onChange={(e) => setCommand(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && executeCommand()}
+        placeholder="Try: 'create a blue rectangle' or 'delete selected shapes'"
+        style={{ width: '100%', padding: 12, fontSize: 14 }}
+      />
+    </div>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <NaturalLanguageCommands />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Smart layout suggestions
+
+Use AI to suggest optimal layouts:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function SmartLayout() {
+  const editor = useEditor()
+
+  const optimizeLayout = async () => {
+    const shapes = editor.getCurrentPageShapes()
+    
+    // Send shapes to AI for layout optimization
+    const response = await fetch('/api/optimize-layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shapes: shapes.map(s => ({
+          id: s.id,
+          type: s.type,
+          x: s.x,
+          y: s.y,
+          props: s.props,
+        })),
+      }),
+    })
+
+    const { optimizedPositions } = await response.json()
+
+    // Apply optimized positions
+    editor.updateShapes(
+      optimizedPositions.map((pos: any) => ({
+        id: pos.id,
+        type: pos.type,
+        x: pos.x,
+        y: pos.y,
+      }))
+    )
+  }
+
+  return (
+    <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000 }}>
+      <button onClick={optimizeLayout} style={{ padding: 8 }}>
+        AI Auto-Layout
+      </button>
+    </div>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <SmartLayout />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Use cases
+
+<CardGroup cols={2}>
+
+<Card title="Diagram generation" icon="diagram-project">
+Generate flowcharts, UML diagrams, or mind maps from text descriptions
+</Card>
+
+<Card title="Smart templates" icon="file-lines">
+Create intelligent templates that adapt based on content
+</Card>
+
+<Card title="Auto-annotation" icon="pen-to-square">
+Automatically label and annotate diagrams
+</Card>
+
+<Card title="Style suggestions" icon="palette">
+Suggest color schemes and styling based on content
+</Card>
+
+<Card title="Content extraction" icon="magnifying-glass">
+Extract structured data from hand-drawn diagrams
+</Card>
+
+<Card title="Accessibility" icon="universal-access">
+Generate alt text and descriptions for shapes
+</Card>
+
+</CardGroup>
+
+## AI provider examples
+
+### OpenAI
+
+```tsx
+async function generateWithOpenAI(prompt: string) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4',
+      messages: [{
+        role: 'user',
+        content: `Generate tldraw shape data for: ${prompt}`,
+      }],
+    }),
+  })
+
+  const data = await response.json()
+  return JSON.parse(data.choices[0].message.content)
+}
+```
+
+### Anthropic Claude
+
+```tsx
+async function generateWithClaude(prompt: string) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-3-opus-20240229',
+      messages: [{
+        role: 'user',
+        content: `Generate tldraw shape data for: ${prompt}`,
+      }],
+    }),
+  })
+
+  const data = await response.json()
+  return JSON.parse(data.content[0].text)
+}
+```
+
+## Best practices
+
+- Provide clear loading states during AI operations
+- Allow users to preview and confirm AI suggestions before applying
+- Implement undo/redo for AI-generated changes
+- Cache AI responses to reduce API calls
+- Handle errors gracefully with fallback options
+- Consider rate limiting for AI API calls
+
+## Related
+
+- [Controlled editor](/examples/controlled-editor) - Programmatic control
+- [Custom tool](/examples/custom-tool) - Build AI-powered tools
+- [Editor API reference](/reference/editor/Editor)

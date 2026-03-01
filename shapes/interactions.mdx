@@ -1,0 +1,666 @@
+---
+title: Shape interactions and events
+description: Handle user interactions, drag and drop, handles, bindings, and other shape events
+---
+
+Shapes can respond to a wide variety of user interactions through ShapeUtil event handlers and capability methods. This allows you to create interactive, dynamic shapes with custom behaviors.
+
+## Click events
+
+Handle clicks and double-clicks on shapes:
+
+### Single click
+
+```typescript
+onClick(shape: MyShape): TLShapePartial<MyShape> | void {
+  // Increment a counter on click
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      clickCount: (shape.props.clickCount || 0) + 1,
+    },
+  }
+}
+```
+
+### Double click
+
+```typescript
+onDoubleClick(shape: MyShape): TLShapePartial<MyShape> | void {
+  // Toggle a boolean prop
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      expanded: !shape.props.expanded,
+    },
+  }
+}
+```
+
+### Double click edge
+
+```typescript
+onDoubleClickEdge(shape: MyShape, info: TLClickEventInfo): TLShapePartial<MyShape> | void {
+  // Add a new vertex at the clicked position
+  const point = info.point
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      vertices: [...shape.props.vertices, point],
+    },
+  }
+}
+```
+
+### Double click corner
+
+```typescript
+onDoubleClickCorner(shape: MyShape, info: TLClickEventInfo): TLShapePartial<MyShape> | void {
+  // Round corners on double-click
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      cornerRadius: shape.props.cornerRadius > 0 ? 0 : 8,
+    },
+  }
+}
+```
+
+<Tip>
+  Return `undefined` or `void` if you don't want to update the shape.
+</Tip>
+
+## Editing mode
+
+Shapes can enter edit mode for in-place text editing or other interactive states:
+
+### Enable editing
+
+```typescript
+canEdit(shape: MyShape, info: TLEditStartInfo): boolean {
+  return true  // Allow double-click to edit
+}
+
+canEditInReadonly(shape: MyShape): boolean {
+  return false  // Prevent editing in readonly mode
+}
+
+canEditWhileLocked(shape: MyShape): boolean {
+  return false  // Prevent editing when locked
+}
+```
+
+### Edit lifecycle
+
+```typescript
+onEditStart(shape: MyShape): void {
+  // Called when editing begins
+  // Set default label position for first-time edit
+  if (isEmptyRichText(shape.props.richText)) {
+    const labelPosition = getDefaultLabelPosition(shape)
+    this.editor.updateShape({
+      id: shape.id,
+      type: shape.type,
+      props: { labelPosition },
+    })
+  }
+}
+
+onEditEnd(shape: MyShape): void {
+  // Called when editing ends
+  // Delete shape if text is empty
+  const text = this.getText(shape)
+  if (text.length === 0) {
+    this.editor.deleteShapes([shape.id])
+  }
+}
+```
+
+## Resize events
+
+Handle shape resizing with full control over behavior:
+
+### Basic resize
+
+```typescript
+canResize(shape: MyShape): boolean {
+  return true  // Allow resizing
+}
+
+onResize(shape: MyShape, info: TLResizeInfo<MyShape>) {
+  const { scaleX, scaleY, newPoint, initialBounds } = info
+  
+  return {
+    x: newPoint.x,
+    y: newPoint.y,
+    props: {
+      w: initialBounds.width * Math.abs(scaleX),
+      h: initialBounds.height * Math.abs(scaleY),
+    },
+  }
+}
+```
+
+### Resize with constraints
+
+```typescript
+onResize(shape: MyShape, info: TLResizeInfo<MyShape>) {
+  const { scaleX, scaleY, newPoint, initialShape } = info
+  
+  // Constrain to minimum size
+  const minWidth = 50
+  const minHeight = 50
+  
+  let w = initialShape.props.w * Math.abs(scaleX)
+  let h = initialShape.props.h * Math.abs(scaleY)
+  
+  // Prevent shrinking below minimum
+  let overShrinkX = 0
+  let overShrinkY = 0
+  
+  if (w < minWidth) {
+    overShrinkX = minWidth - w
+    w = minWidth
+  }
+  
+  if (h < minHeight) {
+    overShrinkY = minHeight - h
+    h = minHeight
+  }
+  
+  // Adjust position to account for minimum size
+  const offset = new Vec(0, 0)
+  
+  if (scaleX < 0) offset.x += w
+  if (scaleY < 0) offset.y += h
+  
+  if (info.handle.includes('left')) {
+    offset.x += scaleX < 0 ? overShrinkX : -overShrinkX
+  }
+  
+  if (info.handle.includes('top')) {
+    offset.y += scaleY < 0 ? overShrinkY : -overShrinkY
+  }
+  
+  const { x, y } = offset.rot(shape.rotation).add(newPoint)
+  
+  return { x, y, props: { w, h } }
+}
+```
+
+### Resize lifecycle
+
+```typescript
+onResizeStart(shape: MyShape): TLShapePartial<MyShape> | void {
+  // Called when resize begins
+  return { props: { isResizing: true } }
+}
+
+onResizeEnd(initial: MyShape, current: MyShape): TLShapePartial<MyShape> | void {
+  // Called when resize completes
+  return { props: { isResizing: false } }
+}
+
+onResizeCancel(initial: MyShape, current: MyShape): void {
+  // Called when resize is cancelled (Esc key)
+}
+```
+
+### Resize modes
+
+The `TLResizeInfo.mode` indicates how the shape is being resized:
+
+<Tabs>
+  <Tab title="resize_bounds">
+    User is directly dragging a resize handle
+    
+    ```typescript
+    onResize(shape: MyShape, info: TLResizeInfo<MyShape>) {
+      if (info.mode === 'resize_bounds') {
+        // Direct resize - maintain crisp edges
+        return { props: { w: newWidth, h: newHeight } }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="scale_shape">
+    Shape is being scaled as part of a larger selection
+    
+    ```typescript
+    onResize(shape: MyShape, info: TLResizeInfo<MyShape>) {
+      if (info.mode === 'scale_shape') {
+        // Part of multi-selection - scale all properties
+        return resizeScaled(shape, info)
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Aspect ratio locking
+
+```typescript
+isAspectRatioLocked(shape: MyShape): boolean {
+  return shape.props.lockAspectRatio
+}
+```
+
+### Hide resize handles
+
+```typescript
+hideResizeHandles(shape: MyShape): boolean {
+  // Hide handles for arrows and lines
+  return true
+}
+```
+
+## Translation (dragging)
+
+### Translation lifecycle
+
+```typescript
+onTranslateStart(shape: MyShape): TLShapePartial<MyShape> | void {
+  // Called when dragging starts
+  // For arrows, unbind if dragging only the arrow
+  if (this.editor.getOnlySelectedShapeId() === shape.id) {
+    return unbindArrowTerminals(shape)
+  }
+}
+
+onTranslate(initial: MyShape, current: MyShape): TLShapePartial<MyShape> | void {
+  // Called during dragging
+  // Update bindings to maintain connections
+  return updateBindings(current)
+}
+
+onTranslateEnd(initial: MyShape, current: MyShape): TLShapePartial<MyShape> | void {
+  // Called when dragging ends
+}
+
+onTranslateCancel(initial: MyShape, current: MyShape): void {
+  // Called when translation is cancelled
+}
+```
+
+## Rotation
+
+```typescript
+hideRotateHandle(shape: MyShape): boolean {
+  return false  // Show rotation handle
+}
+
+onRotateStart(shape: MyShape): TLShapePartial<MyShape> | void {
+  // Called when rotation begins
+}
+
+onRotate(initial: MyShape, current: MyShape): TLShapePartial<MyShape> | void {
+  // Called during rotation
+}
+
+onRotateEnd(initial: MyShape, current: MyShape): TLShapePartial<MyShape> | void {
+  // Called when rotation ends
+}
+
+onRotateCancel(initial: MyShape, current: MyShape): void {
+  // Called when rotation is cancelled
+}
+```
+
+## Custom handles
+
+Shapes can define custom draggable handles:
+
+### Define handles
+
+```typescript
+import { TLHandle, IndexKey } from 'tldraw'
+
+getHandles(shape: TLArrowShape): TLHandle[] {
+  const info = getArrowInfo(this.editor, shape)
+  
+  return [
+    {
+      id: 'start',
+      type: 'vertex',          // 'vertex' | 'virtual' | 'create'
+      index: 'a1' as IndexKey,
+      x: info.start.handle.x,
+      y: info.start.handle.y,
+      canBind: true,           // Can bind to other shapes
+    },
+    {
+      id: 'end',
+      type: 'vertex',
+      index: 'a3' as IndexKey,
+      x: info.end.handle.x,
+      y: info.end.handle.y,
+      canBind: true,
+    },
+    {
+      id: 'middle',
+      type: 'virtual',         // Virtual handles appear on hover
+      index: 'a2' as IndexKey,
+      x: info.middle.x,
+      y: info.middle.y,
+    },
+  ]
+}
+```
+
+### Handle drag events
+
+```typescript
+onHandleDragStart(shape: MyShape, info: TLHandleDragInfo<MyShape>): TLShapePartial<MyShape> | void {
+  const { handle, isPrecise } = info
+  // Called when handle dragging starts
+}
+
+onHandleDrag(shape: MyShape, info: TLHandleDragInfo<MyShape>): TLShapePartial<MyShape> | void {
+  const { handle, isPrecise, isCreatingShape } = info
+  
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      [handle.id]: { x: handle.x, y: handle.y },
+    },
+  }
+}
+
+onHandleDragEnd(current: MyShape, info: TLHandleDragInfo<MyShape>): TLShapePartial<MyShape> | void {
+  // Called when handle dragging ends
+}
+
+onHandleDragCancel(current: MyShape, info: TLHandleDragInfo<MyShape>): void {
+  // Called when handle drag is cancelled
+}
+```
+
+### Double-click handles
+
+```typescript
+onDoubleClickHandle(shape: MyShape, handle: TLHandle): TLShapePartial<MyShape> | void {
+  // Toggle arrowhead on double-click
+  if (handle.id === 'start') {
+    return {
+      id: shape.id,
+      type: shape.type,
+      props: {
+        arrowheadStart: shape.props.arrowheadStart === 'none' ? 'arrow' : 'none',
+      },
+    }
+  }
+}
+```
+
+## Bindings
+
+Bindings create relationships between shapes (like arrows connecting to shapes):
+
+### Control binding capability
+
+```typescript
+canBind(opts: TLShapeUtilCanBindOpts): boolean {
+  const { fromShape, toShape, bindingType } = opts
+  
+  // Arrows can bind TO shapes, but not FROM shapes to arrows
+  if (bindingType === 'arrow') {
+    return toShape.type !== 'arrow'
+  }
+  
+  return true
+}
+```
+
+<ParamField path="fromShape" type="TLShape | { type }" required>
+  Shape the binding originates from (or type stub if not created yet)
+</ParamField>
+
+<ParamField path="toShape" type="TLShape | { type }" required>
+  Shape the binding points to (or type stub if not created yet)
+</ParamField>
+
+<ParamField path="bindingType" type="string" required>
+  Type of binding (e.g., 'arrow')
+</ParamField>
+
+### Binding change events
+
+```typescript
+onBindingChange(shape: MyShape): TLShapePartial<MyShape> | void {
+  // Called when bindings to/from this shape change
+  // Update shape based on new binding state
+}
+```
+
+## Drag and drop
+
+Handle shapes being dragged over and dropped onto this shape:
+
+### Drag in/over/out
+
+```typescript
+onDragShapesIn(shape: MyShape, shapes: TLShape[], info: TLDragShapesInInfo): void {
+  // Called when shapes are first dragged over this shape
+  console.log('Shapes entering:', shapes.length)
+}
+
+onDragShapesOver(shape: MyShape, shapes: TLShape[], info: TLDragShapesOverInfo): void {
+  // Called continuously while shapes are dragged over
+  // Reparent shapes to this container
+  this.editor.reparentShapes(shapes, shape.id)
+}
+
+onDragShapesOut(shape: MyShape, shapes: TLShape[], info: TLDragShapesOutInfo): void {
+  // Called when shapes are dragged out
+  console.log('Shapes leaving:', shapes.length)
+}
+```
+
+### Drop
+
+```typescript
+onDropShapesOver(shape: MyShape, shapes: TLShape[], info: TLDropShapesOverInfo): void {
+  // Called when shapes are dropped onto this shape
+  this.editor.reparentShapes(shapes, shape.id)
+  this.editor.updateShapes(
+    shapes.map(s => ({
+      id: s.id,
+      type: s.type,
+      props: { contained: true },
+    }))
+  )
+}
+```
+
+## Cropping
+
+```typescript
+canCrop(shape: MyShape): boolean {
+  return true  // Enable cropping (for images, videos)
+}
+
+onCrop(shape: MyShape, info: TLCropInfo<MyShape>): TLShapePartial<MyShape> | void {
+  const { crop, uncroppedSize } = info
+  
+  return {
+    id: shape.id,
+    type: shape.type,
+    props: {
+      crop: {
+        topLeft: crop.topLeft,
+        bottomRight: crop.bottomRight,
+      },
+    },
+  }
+}
+```
+
+## Children management
+
+```typescript
+canReceiveNewChildrenOfType(shape: MyShape, type: string): boolean {
+  // Only frames can receive most shape types
+  if (shape.type === 'frame') {
+    return type !== 'frame'  // No nested frames
+  }
+  return false
+}
+
+canResizeChildren(shape: MyShape): boolean {
+  return true  // Resize children when this shape is resized
+}
+
+onChildrenChange(shape: MyShape): TLShapePartial[] | void {
+  // Called when children are added/removed/changed
+  // Return updates to apply to any shapes
+  const children = this.editor.getSortedChildIdsForParent(shape.id)
+  return [{
+    id: shape.id,
+    type: shape.type,
+    props: { childCount: children.length },
+  }]
+}
+```
+
+## Layout participation
+
+```typescript
+canBeLaidOut(shape: MyShape, info: TLShapeUtilCanBeLaidOutOpts): boolean {
+  const { type, shapes } = info
+  
+  // type: 'align' | 'distribute' | 'pack' | 'stack' | 'flip' | 'stretch'
+  
+  if (type === 'flip' && shape.type === 'arrow') {
+    // Arrows can only flip if both terminals are also selected
+    const bindings = getArrowBindings(this.editor, shape)
+    if (bindings.start && !shapes?.find(s => s.id === bindings.start.toId)) {
+      return false
+    }
+  }
+  
+  return true
+}
+```
+
+## Snapping control
+
+```typescript
+canSnap(shape: MyShape): boolean {
+  // Arrows don't snap to other shapes
+  return shape.type !== 'arrow'
+}
+
+canTabTo(shape: MyShape): boolean {
+  return true  // Can be selected with Tab key
+}
+```
+
+## Scrolling
+
+```typescript
+canScroll(shape: MyShape): boolean {
+  // Enable scrolling while editing (for text areas)
+  return this.editor.getEditingShapeId() === shape.id
+}
+```
+
+## Animation interpolation
+
+Provide smooth animations between shape states:
+
+```typescript
+getInterpolatedProps(
+  startShape: MyShape,
+  endShape: MyShape,
+  progress: number
+): MyShape['props'] {
+  return {
+    // Use end shape's properties for discrete values
+    ...(progress > 0.5 ? endShape.props : startShape.props),
+    // Interpolate continuous values
+    w: lerp(startShape.props.w, endShape.props.w, progress),
+    h: lerp(startShape.props.h, endShape.props.h, progress),
+    scale: lerp(startShape.props.scale, endShape.props.scale, progress),
+    opacity: lerp(startShape.props.opacity, endShape.props.opacity, progress),
+  }
+}
+```
+
+## Accessibility
+
+```typescript
+getAriaDescriptor(shape: MyShape): string | undefined {
+  return `${shape.type} shape with ${this.getText(shape)}`
+}
+```
+
+## Complete interaction example
+
+Here's a complete example of a shape with rich interactions:
+
+```typescript
+class InteractiveShapeUtil extends ShapeUtil<InteractiveShape> {
+  static override type = 'interactive' as const
+  
+  override canEdit() {
+    return true
+  }
+  
+  override canResize() {
+    return true
+  }
+  
+  override onClick(shape: InteractiveShape) {
+    return {
+      props: {
+        clicks: (shape.props.clicks || 0) + 1,
+      },
+    }
+  }
+  
+  override onDoubleClick(shape: InteractiveShape) {
+    return {
+      props: {
+        expanded: !shape.props.expanded,
+      },
+    }
+  }
+  
+  override onResize(shape: InteractiveShape, info: TLResizeInfo<InteractiveShape>) {
+    return {
+      x: info.newPoint.x,
+      y: info.newPoint.y,
+      props: {
+        w: Math.max(50, info.initialBounds.width * info.scaleX),
+        h: Math.max(50, info.initialBounds.height * info.scaleY),
+      },
+    }
+  }
+  
+  override onEditStart(shape: InteractiveShape) {
+    console.log('Edit started')
+  }
+  
+  override onEditEnd(shape: InteractiveShape) {
+    if (this.getText(shape).trim().length === 0) {
+      this.editor.deleteShapes([shape.id])
+    }
+  }
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="ShapeUtil API" icon="code" href="/shapes/shape-utils">
+    Complete method reference
+  </Card>
+  <Card title="Shape overview" icon="shapes" href="/shapes/overview">
+    Understanding the shape system
+  </Card>
+</CardGroup>

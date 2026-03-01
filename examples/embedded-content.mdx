@@ -1,0 +1,321 @@
+---
+title: Embedded content
+description: Embed external content like videos, websites, and interactive media
+---
+
+Tldraw supports embedding external content directly on the canvas, including videos, websites, and custom embeds.
+
+## Built-in embed support
+
+Tldraw comes with built-in support for popular embedding platforms:
+
+- YouTube
+- Vimeo
+- Figma
+- Google Maps
+- Twitter/X
+- GitHub Gists
+- CodePen
+- And more...
+
+Users can paste URLs directly onto the canvas and tldraw will automatically convert them to embeds.
+
+## Adding custom embeds
+
+```tsx CustomEmbedExample.tsx
+import {
+  CustomEmbedDefinition,
+  DEFAULT_EMBED_DEFINITIONS,
+  DefaultEmbedDefinitionType,
+  Tldraw,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+// [1] Filter default embeds to keep only specific ones
+const defaultEmbedTypesToKeep: DefaultEmbedDefinitionType[] = ['tldraw', 'youtube']
+const defaultEmbedsToKeep = DEFAULT_EMBED_DEFINITIONS.filter((embed) =>
+  defaultEmbedTypesToKeep.includes(embed.type)
+)
+
+// [2] Define a custom embed
+const customEmbed: CustomEmbedDefinition = {
+  type: 'jsfiddle',
+  title: 'JSFiddle',
+  hostnames: ['jsfiddle.net'],
+  minWidth: 300,
+  minHeight: 300,
+  width: 720,
+  height: 500,
+  doesResize: true,
+  toEmbedUrl: (url) => {
+    const urlObj = new URL(url)
+    const matches = urlObj.pathname.match(/\/([^/]+)\/([^/]+)\/(\d+)\/embedded/)
+    if (matches) {
+      return `https://jsfiddle.net/${matches[1]}/${matches[2]}/embedded/`
+    }
+    return
+  },
+  fromEmbedUrl: (url) => {
+    const urlObj = new URL(url)
+    const matches = urlObj.pathname.match(/\/([^/]+)\/([^/]+)\/(\d+)\/embedded/)
+    if (matches) {
+      return `https://jsfiddle.net/${matches[1]}/${matches[2]}/`
+    }
+    return
+  },
+  icon: 'https://jsfiddle.net/img/favicon.png',
+}
+
+// [3] Combine default and custom embeds
+const embeds = [...defaultEmbedsToKeep, customEmbed]
+
+export default function CustomEmbedExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw embeds={embeds} />
+    </div>
+  )
+}
+```
+
+## Custom embed definition
+
+A custom embed definition has the following structure:
+
+```tsx
+interface CustomEmbedDefinition {
+  type: string              // Unique identifier
+  title: string            // Display name
+  hostnames: string[]      // Supported domains
+  minWidth: number         // Minimum width in pixels
+  minHeight: number        // Minimum height in pixels  
+  width: number           // Default width
+  height: number          // Default height
+  doesResize: boolean     // Whether embed supports resizing
+  toEmbedUrl: (url: string) => string | undefined    // Convert URL to embed URL
+  fromEmbedUrl: (url: string) => string | undefined  // Convert embed URL back to regular URL
+  icon: string            // Icon URL for the embed dialog
+}
+```
+
+## URL transformation
+
+The `toEmbedUrl` and `fromEmbedUrl` functions transform URLs:
+
+<CodeGroup>
+
+```tsx toEmbedUrl
+// Convert user-provided URL to embeddable iframe URL
+toEmbedUrl: (url) => {
+  const videoId = extractVideoId(url)
+  return `https://www.youtube.com/embed/${videoId}`
+}
+```
+
+```tsx fromEmbedUrl  
+// Convert embed URL back to shareable URL
+fromEmbedUrl: (url) => {
+  const videoId = url.split('/embed/')[1]
+  return `https://www.youtube.com/watch?v=${videoId}`
+}
+```
+
+</CodeGroup>
+
+## Programmatically creating embeds
+
+You can create embed shapes programmatically:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function EmbedButtons() {
+  const editor = useEditor()
+
+  const addYouTubeVideo = () => {
+    editor.createShape({
+      type: 'embed',
+      x: 100,
+      y: 100,
+      props: {
+        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        w: 720,
+        h: 405,
+      },
+    })
+  }
+
+  const addWebsite = () => {
+    editor.createShape({
+      type: 'embed',
+      x: 100,
+      y: 100,
+      props: {
+        url: 'https://example.com',
+        w: 800,
+        h: 600,
+      },
+    })
+  }
+
+  return (
+    <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000 }}>
+      <button onClick={addYouTubeVideo} style={{ marginRight: 8 }}>
+        Add YouTube Video
+      </button>
+      <button onClick={addWebsite}>
+        Add Website
+      </button>
+    </div>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <EmbedButtons />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Interactive embeds
+
+Embeds in tldraw are fully interactive. Users can:
+
+- Click and interact with embedded content
+- Resize embeds
+- Rotate embeds
+- Move embeds around the canvas
+- Copy and paste embeds
+
+## Security considerations
+
+<Warning>
+Embeds use iframes which can pose security risks. Only embed content from trusted sources.
+</Warning>
+
+Tldraw automatically:
+
+- Validates URLs against the defined hostnames
+- Sanitizes embed URLs
+- Uses iframe sandboxing for security
+
+For additional security:
+
+```tsx
+const customEmbed: CustomEmbedDefinition = {
+  // ... other properties
+  hostnames: ['trusted-domain.com'], // Restrict to specific domains
+  toEmbedUrl: (url) => {
+    // Add additional URL validation
+    if (!isValidUrl(url)) return undefined
+    return sanitizeUrl(url)
+  },
+}
+```
+
+## Custom embed components
+
+For full control over embed rendering, you can create a custom embed shape:
+
+```tsx
+import {
+  HTMLContainer,
+  ShapeUtil,
+  TLShape,
+  T,
+  Tldraw,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+type IframeShape = TLShape<'iframe', { url: string; w: number; h: number }>
+
+class IframeShapeUtil extends ShapeUtil<IframeShape> {
+  static override type = 'iframe'
+  static override props = {
+    url: T.string,
+    w: T.number,
+    h: T.number,
+  }
+
+  getDefaultProps(): IframeShape['props'] {
+    return {
+      url: '',
+      w: 720,
+      h: 500,
+    }
+  }
+
+  component(shape: IframeShape) {
+    return (
+      <HTMLContainer id={shape.id}>
+        <iframe
+          src={shape.props.url}
+          width="100%"
+          height="100%"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </HTMLContainer>
+    )
+  }
+
+  indicator(shape: IframeShape) {
+    return <rect width={shape.props.w} height={shape.props.h} />
+  }
+}
+
+export default function CustomIframeExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw shapeUtils={[IframeShapeUtil]} />
+    </div>
+  )
+}
+```
+
+## Supported default embeds
+
+The `DEFAULT_EMBED_DEFINITIONS` includes:
+
+- `youtube` - YouTube videos
+- `vimeo` - Vimeo videos  
+- `figma` - Figma files
+- `google_maps` - Google Maps
+- `twitter` - Twitter/X posts
+- `github_gist` - GitHub Gists
+- `codepen` - CodePen embeds
+- `tldraw` - Shared tldraw boards
+- And more...
+
+## Filtering default embeds
+
+You can limit which embeds are available:
+
+```tsx
+import { DEFAULT_EMBED_DEFINITIONS, Tldraw } from 'tldraw'
+
+// Only allow YouTube and Vimeo
+const allowedEmbeds = DEFAULT_EMBED_DEFINITIONS.filter(
+  embed => ['youtube', 'vimeo'].includes(embed.type)
+)
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw embeds={allowedEmbeds} />
+    </div>
+  )
+}
+```
+
+## Related
+
+- [Custom shape](/examples/custom-shape) - Create custom shapes
+- [Asset handling](/guides/assets) - Working with assets
+- [Embed definitions reference](/reference/tldraw/EmbedDefinition)

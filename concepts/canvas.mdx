@@ -1,0 +1,594 @@
+---
+title: Canvas
+description: The canvas system in tldraw handles rendering shapes, managing viewports, and coordinating HTML and SVG layers for optimal performance.
+---
+
+The canvas is where shapes are rendered and user interactions occur. tldraw's canvas system combines HTML and SVG rendering with a reactive camera system to deliver smooth, performant infinite canvas experiences.
+
+## Overview
+
+The canvas system consists of:
+
+- **Camera**: Controls viewport position and zoom
+- **Rendering layers**: Separate HTML and SVG layers for optimal performance
+- **Shape culling**: Only renders visible shapes
+- **Transform system**: Converts between coordinate spaces
+- **Performance optimizations**: Level-of-detail, throttling, and batching
+
+## Canvas architecture
+
+### Rendering layers
+
+The canvas uses multiple layers:
+
+```tsx
+<TldrawEditor>
+  <div className="tl-canvas">
+    {/* Background layer */}
+    <Background />
+    
+    {/* SVG layer for vector shapes */}
+    <svg className="tl-svg-layer">
+      <g className="tl-shapes">
+        <Shape shapeId={id1} />
+        <Shape shapeId={id2} />
+      </g>
+      <g className="tl-indicators">
+        {/* Selection indicators */}
+      </g>
+    </svg>
+    
+    {/* HTML layer for rich content */}
+    <div className="tl-html-layer">
+      <Shape shapeId={id3} /> {/* e.g., text with input */}
+      <Shape shapeId={id4} /> {/* e.g., video embeds */}
+    </div>
+    
+    {/* UI overlay layer */}
+    <div className="tl-overlay">
+      {/* Handles, toolbar, etc. */}
+    </div>
+  </div>
+</TldrawEditor>
+```
+
+### Camera system
+
+The camera defines what portion of the infinite canvas is visible:
+
+```tsx
+interface TLCamera {
+  x: number  // Pan X
+  y: number  // Pan Y
+  z: number  // Zoom level (1 = 100%)
+}
+
+// Get current camera
+const camera = editor.getCamera()
+// { x: 0, y: 0, z: 1 }
+
+// Set camera
+editor.setCamera({ x: 100, y: 100, z: 1.5 })
+
+// Animate camera
+editor.animateCamera(
+  { x: 500, y: 500, z: 2 },
+  { duration: 500, easing: 'easeInOutCubic' }
+)
+```
+
+## Coordinate systems
+
+tldraw uses multiple coordinate spaces:
+
+### Screen space
+
+Pixels relative to the viewport:
+
+```tsx
+// Mouse position in screen space
+const screenPoint = { x: 150, y: 200 }
+
+// Convert to page space
+const pagePoint = editor.screenToPage(screenPoint)
+```
+
+### Page space
+
+Coordinates on the infinite canvas:
+
+```tsx
+// Shape position in page space
+const shape = editor.createShape({
+  type: 'geo',
+  x: 500,    // Page X
+  y: 300,    // Page Y
+  props: { w: 100, h: 100 }
+})
+
+// Convert to screen space
+const screenPoint = editor.pageToScreen({ x: 500, y: 300 })
+```
+
+### Shape space
+
+Coordinates relative to a shape's origin:
+
+```tsx
+// Point in shape's local coordinates
+const localPoint = editor.getPointInShapeSpace(
+  shape,
+  pagePoint
+)
+
+// Transform from shape to page space
+const pageTransform = editor.getShapePageTransform(shape)
+const pagePoint = Mat.applyToPoint(pageTransform, localPoint)
+```
+
+## Rendering shapes
+
+### SVG rendering
+
+For vector graphics, use `SVGContainer`:
+
+```tsx
+import { SVGContainer } from '@tldraw/editor'
+
+component(shape: RectShape) {
+  return (
+    <SVGContainer>
+      <rect
+        width={shape.props.w}
+        height={shape.props.h}
+        fill={shape.props.color}
+        stroke="black"
+        strokeWidth={2}
+      />
+    </SVGContainer>
+  )
+}
+```
+
+### HTML rendering
+
+For rich content, use `HTMLContainer`:
+
+```tsx
+import { HTMLContainer } from '@tldraw/editor'
+
+component(shape: TextShape) {
+  return (
+    <HTMLContainer>
+      <div
+        style={{
+          width: shape.props.w,
+          height: shape.props.h,
+          fontSize: shape.props.fontSize,
+          color: shape.props.color
+        }}
+      >
+        {shape.props.text}
+      </div>
+    </HTMLContainer>
+  )
+}
+```
+
+### Hybrid rendering
+
+Combine SVG and HTML for complex shapes:
+
+```tsx
+component(shape: CardShape) {
+  return (
+    <>
+      {/* SVG for the border */}
+      <SVGContainer>
+        <rect
+          width={shape.props.w}
+          height={shape.props.h}
+          fill="none"
+          stroke="black"
+          strokeWidth={2}
+          rx={8}
+        />
+      </SVGContainer>
+      
+      {/* HTML for the content */}
+      <HTMLContainer>
+        <div className="card-content">
+          <h3>{shape.props.title}</h3>
+          <p>{shape.props.description}</p>
+        </div>
+      </HTMLContainer>
+    </>
+  )
+}
+```
+
+## Performance optimizations
+
+### Shape culling
+
+Only visible shapes are rendered:
+
+```tsx
+import { useShapeCulling } from '@tldraw/editor'
+
+function ShapeRenderer() {
+  const editor = useEditor()
+  
+  // Get only visible shapes
+  const visibleShapes = useShapeCulling(editor)
+  
+  return (
+    <>
+      {visibleShapes.map(shape => (
+        <Shape key={shape.id} shape={shape} />
+      ))}
+    </>
+  )
+}
+```
+
+### Level-of-detail (LOD)
+
+Simplify rendering at low zoom levels:
+
+```tsx
+import { useValue } from '@tldraw/state-react'
+
+component(shape: ComplexShape) {
+  const editor = this.editor
+  const zoom = useValue('zoom', () => editor.getZoomLevel(), [editor])
+  
+  // Simplified at low zoom
+  if (zoom < 0.15) {
+    return (
+      <SVGContainer>
+        <rect
+          width={shape.props.w}
+          height={shape.props.h}
+          fill={shape.props.color}
+        />
+      </SVGContainer>
+    )
+  }
+  
+  // Full detail at normal zoom
+  return <DetailedShapeComponent shape={shape} />
+}
+```
+
+### Text outline LOD
+
+tldraw automatically disables text outlines at low zoom:
+
+```tsx
+// This is handled automatically by the editor
+// Text outlines are disabled when zoom < textShadowLod option
+
+const editor = new Editor({
+  // ...
+  options: {
+    textShadowLod: 0.35  // Default: disable outlines below 35% zoom
+  }
+})
+```
+
+### Throttle expensive operations
+
+```tsx
+import { throttleToNextFrame } from '@tldraw/utils'
+
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  private updateThrottled = throttleToNextFrame(() => {
+    // Expensive operation
+    this.computeComplexGeometry()
+  })
+  
+  onResize(shape: MyShape, info: TLResizeInfo) {
+    // Throttle to animation frame
+    this.updateThrottled()
+    
+    return shape
+  }
+}
+```
+
+## Camera controls
+
+### Zoom operations
+
+```tsx
+// Get current zoom
+const zoom = editor.getZoomLevel()
+
+// Set zoom
+editor.setCamera({ ...editor.getCamera(), z: 1.5 })
+
+// Zoom in/out
+editor.zoomIn()
+editor.zoomOut()
+
+// Reset zoom
+editor.resetZoom()
+
+// Zoom to fit content
+editor.zoomToFit()
+
+// Zoom to selection
+editor.zoomToSelection()
+
+// Zoom to specific bounds
+editor.zoomToBounds(bounds, { 
+  duration: 300,
+  easing: 'easeInOutCubic' 
+})
+```
+
+### Pan operations
+
+```tsx
+// Pan to point
+editor.centerOnPoint({ x: 500, y: 500 })
+
+// Pan by delta
+const camera = editor.getCamera()
+editor.setCamera({
+  x: camera.x + 100,
+  y: camera.y + 50,
+  z: camera.z
+})
+
+// Animate pan
+editor.animateCamera(
+  { x: 1000, y: 1000, z: 1 },
+  { duration: 500 }
+)
+```
+
+### Camera constraints
+
+Constrain camera movement and zoom:
+
+```tsx
+const editor = new Editor({
+  // ...
+  options: {
+    camera: {
+      zoomMin: 0.1,
+      zoomMax: 8,
+      zoomSpeed: 1,
+      isLocked: false,
+      panSpeed: 1,
+      wheelBehavior: 'zoom'  // or 'pan'
+    }
+  }
+})
+
+// Lock camera
+editor.updateInstanceState({ 
+  canMoveCamera: false 
+})
+
+// Unlock camera
+editor.updateInstanceState({ 
+  canMoveCamera: true 
+})
+```
+
+## Viewport and bounds
+
+### Get viewport bounds
+
+```tsx
+// Viewport bounds in page space
+const viewport = editor.getViewportPageBounds()
+// Box { x, y, w, h, minX, minY, maxX, maxY }
+
+// Viewport center
+const center = viewport.center
+
+// Check if shape is in viewport
+const shapeInView = viewport.includes(editor.getShapePageBounds(shape))
+```
+
+### Screen bounds
+
+```tsx
+// Size of the canvas element
+const screenBounds = editor.getViewportScreenBounds()
+// { x: 0, y: 0, w: 1920, h: 1080 }
+```
+
+## Custom rendering
+
+### Background
+
+Customize the canvas background:
+
+```tsx
+import { TLEditorComponents } from '@tldraw/editor'
+
+function CustomBackground() {
+  return (
+    <svg className="tl-background">
+      <defs>
+        <pattern
+          id="grid"
+          width={20}
+          height={20}
+          patternUnits="userSpaceOnUse"
+        >
+          <rect width={20} height={20} fill="white" />
+          <path
+            d="M 20 0 L 0 0 0 20"
+            fill="none"
+            stroke="#e0e0e0"
+            strokeWidth={1}
+          />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grid)" />
+    </svg>
+  )
+}
+
+const components: TLEditorComponents = {
+  Background: CustomBackground
+}
+
+<Tldraw components={components} />
+```
+
+### Overlays
+
+Add custom UI overlays:
+
+```tsx
+function CustomOverlay() {
+  const editor = useEditor()
+  const camera = useValue('camera', () => editor.getCamera(), [editor])
+  
+  return (
+    <div className="custom-overlay">
+      <div>Zoom: {Math.round(camera.z * 100)}%</div>
+      <div>Position: ({Math.round(camera.x)}, {Math.round(camera.y)})</div>
+    </div>
+  )
+}
+
+const components: TLEditorComponents = {
+  InFrontOfTheCanvas: CustomOverlay
+}
+```
+
+### Shape indicators
+
+Customize selection indicators:
+
+```tsx
+indicator(shape: MyShape) {
+  const bounds = this.editor.getShapeGeometry(shape).bounds
+  
+  return (
+    <>
+      {/* Selection outline */}
+      <rect
+        x={bounds.x}
+        y={bounds.y}
+        width={bounds.width}
+        height={bounds.height}
+        fill="none"
+        stroke="blue"
+        strokeWidth={2}
+      />
+      
+      {/* Custom indicator elements */}
+      <circle
+        cx={bounds.center.x}
+        cy={bounds.center.y}
+        r={5}
+        fill="blue"
+      />
+    </>
+  )
+}
+```
+
+## Canvas events
+
+The canvas handles various input events:
+
+```tsx
+import { useCanvasEvents } from '@tldraw/editor'
+
+function Canvas() {
+  const events = useCanvasEvents()
+  
+  return (
+    <div
+      className="tl-canvas"
+      {...events}
+    >
+      {/* Canvas content */}
+    </div>
+  )
+}
+
+// Events handled:
+// - onPointerDown
+// - onPointerMove
+// - onPointerUp
+// - onWheel
+// - onKeyDown
+// - onKeyUp
+// - etc.
+```
+
+## Exporting canvas content
+
+### Export to SVG
+
+```tsx
+import { exportToSvg } from '@tldraw/editor'
+
+// Export selected shapes
+const svg = await editor.getSvg(
+  editor.getSelectedShapes(),
+  { background: true }
+)
+
+if (svg) {
+  // Download SVG
+  const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'canvas.svg'
+  a.click()
+}
+```
+
+### Export to image
+
+```tsx
+// Export as PNG
+const blob = await editor.exportToBlob({
+  format: 'png',
+  ids: editor.getSelectedShapeIds(),
+  background: true,
+  scale: 2  // 2x resolution
+})
+
+if (blob) {
+  const url = URL.createObjectURL(blob)
+  // Use the image URL
+}
+```
+
+## Best practices
+
+<Note>
+**Use culling**: Let the editor handle shape culling automatically. Don't try to manually filter visible shapes unless you have a specific reason.
+</Note>
+
+<Note>
+**Implement LOD**: For complex shapes, implement level-of-detail rendering to maintain performance at low zoom levels.
+</Note>
+
+<Info>
+**Choose the right container**: Use `SVGContainer` for vector graphics and `HTMLContainer` for rich content. Avoid mixing unless necessary.
+</Info>
+
+<Note>
+**Optimize expensive rendering**: Use `useMemo`, `useValue`, and throttling for expensive shape rendering operations.
+</Note>
+
+## Related
+
+- [Editor](/concepts/editor) - Working with the Editor API
+- [Shapes](/concepts/shapes) - Rendering custom shapes
+- [Camera API](/api-reference/camera) - Complete camera API reference

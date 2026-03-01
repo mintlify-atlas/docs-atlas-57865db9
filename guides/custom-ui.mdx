@@ -1,0 +1,555 @@
+---
+title: Custom UI
+description: Learn how to customize the tldraw user interface
+---
+
+Customize tldraw's UI by replacing components, adding custom menus, or building entirely custom interfaces.
+
+## Overview
+
+The tldraw UI is built with React components that you can:
+
+- Replace with custom implementations
+- Hide selectively
+- Build from scratch using editor primitives
+
+## Hiding the default UI
+
+The simplest customization is hiding the built-in UI:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function MyApp() {
+  return (
+    <Tldraw hideUi />
+  )
+}
+```
+
+<Note>
+  The `hideUi` prop hides the toolbar, style panel, and page menu. The context menu remains visible by default.
+</Note>
+
+## Building a custom UI
+
+Create your own interface using the `useEditor` hook:
+
+<Steps>
+  <Step title="Hide default UI and add custom component">
+    ```tsx
+    import { Tldraw } from 'tldraw'
+    import { CustomUI } from './CustomUI'
+
+    export default function MyApp() {
+      return (
+        <Tldraw hideUi>
+          <CustomUI />
+        </Tldraw>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Access the editor with useEditor">
+    ```tsx
+    import { useEditor, track } from 'tldraw'
+    import { useEffect } from 'react'
+
+    export const CustomUI = track(() => {
+      const editor = useEditor()
+
+      // Set up keyboard shortcuts
+      useEffect(() => {
+        const handleKeyUp = (e: KeyboardEvent) => {
+          switch (e.key) {
+            case 'Delete':
+            case 'Backspace':
+              editor.deleteShapes(editor.getSelectedShapeIds())
+              break
+            case 'v':
+              editor.setCurrentTool('select')
+              break
+            case 'e':
+              editor.setCurrentTool('eraser')
+              break
+            case 'd':
+              editor.setCurrentTool('draw')
+              break
+          }
+        }
+
+        window.addEventListener('keyup', handleKeyUp)
+        return () => window.removeEventListener('keyup', handleKeyUp)
+      }, [editor])
+
+      return (
+        <div className="custom-toolbar">
+          <button
+            data-active={editor.getCurrentToolId() === 'select'}
+            onClick={() => editor.setCurrentTool('select')}
+          >
+            Select
+          </button>
+          <button
+            data-active={editor.getCurrentToolId() === 'draw'}
+            onClick={() => editor.setCurrentTool('draw')}
+          >
+            Draw
+          </button>
+          <button
+            data-active={editor.getCurrentToolId() === 'eraser'}
+            onClick={() => editor.setCurrentTool('eraser')}
+          >
+            Eraser
+          </button>
+        </div>
+      )
+    })
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Wrap your custom UI component with `track()` to make it reactive. Without this, the UI won't update when editor state changes.
+</Warning>
+
+## Replacing specific components
+
+Replace individual UI components while keeping the rest:
+
+```tsx
+import { Tldraw, TLEditorComponents, useEditor } from 'tldraw'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  
+  return (
+    <div style={{ padding: 20, pointerEvents: 'all' }}>
+      <button onClick={() => editor.setCurrentTool('select')}>Select</button>
+      <button onClick={() => editor.setCurrentTool('draw')}>Draw</button>
+      <button onClick={() => editor.deleteShapes(editor.getSelectedShapeIds())}>
+        Delete
+      </button>
+    </div>
+  )
+}
+
+const components: Partial<TLEditorComponents> = {
+  Toolbar: CustomToolbar,
+}
+
+export default function MyApp() {
+  return <Tldraw components={components} />
+}
+```
+
+## Available component slots
+
+You can replace these components:
+
+<Tabs>
+  <Tab title="UI Components">
+    ```typescript
+    import { TLUiComponents } from 'tldraw'
+
+    const components: Partial<TLUiComponents> = {
+      Toolbar: CustomToolbar,
+      StylePanel: CustomStylePanel,
+      PageMenu: CustomPageMenu,
+      NavigationPanel: CustomNavigationPanel,
+      QuickActions: CustomQuickActions,
+      HelperButtons: CustomHelperButtons,
+      DebugPanel: CustomDebugPanel,
+      DebugMenu: CustomDebugMenu,
+      MenuPanel: CustomMenuPanel,
+      TopPanel: CustomTopPanel,
+      SharePanel: CustomSharePanel,
+      ContextMenu: CustomContextMenu,
+    }
+    ```
+  </Tab>
+
+  <Tab title="Canvas Components">
+    ```typescript
+    import { TLEditorComponents } from 'tldraw'
+
+    const components: Partial<TLEditorComponents> = {
+      Background: CustomBackground,
+      Brush: CustomBrush,
+      Scribble: CustomScribble,
+      SnapIndicator: CustomSnapIndicator,
+      Handles: CustomHandles,
+      CollaboratorHint: CustomCollaboratorHint,
+      Grid: CustomGrid,
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Custom canvas components
+
+Customize the canvas rendering:
+
+```tsx
+import { TLEditorComponents, toDomPrecision, useTransform } from 'tldraw'
+import { useRef } from 'react'
+
+const components: TLEditorComponents = {
+  Brush: function CustomBrush({ brush }) {
+    const rSvg = useRef<SVGSVGElement>(null)
+    useTransform(rSvg, brush.x, brush.y)
+
+    const w = toDomPrecision(Math.max(1, brush.w))
+    const h = toDomPrecision(Math.max(1, brush.h))
+
+    return (
+      <svg ref={rSvg} className="tl-overlays__item">
+        <rect className="tl-brush" stroke="red" fill="none" width={w} height={h} />
+      </svg>
+    )
+  },
+  
+  Scribble: ({ scribble, opacity, color }) => {
+    return (
+      <svg className="tl-overlays__item">
+        <polyline
+          points={scribble.points.map((p) => `${p.x},${p.y}`).join(' ')}
+          stroke={color ?? 'blue'}
+          opacity={opacity ?? '1'}
+          fill="none"
+        />
+      </svg>
+    )
+  },
+  
+  SnapIndicator: null, // Hide snap indicators
+}
+
+export default function MyApp() {
+  return <Tldraw components={components} />
+}
+```
+
+## Adding custom buttons
+
+Add buttons to existing UI areas:
+
+```tsx
+import { Tldraw, TLUiComponents, useEditor } from 'tldraw'
+
+function ExportButton() {
+  const editor = useEditor()
+  
+  return (
+    <button
+      style={{ pointerEvents: 'all', fontSize: 18 }}
+      onClick={async () => {
+        const shapeIds = editor.getCurrentPageShapeIds()
+        if (shapeIds.size === 0) return alert('No shapes on canvas')
+        
+        const { blob } = await editor.toImage([...shapeIds], { 
+          format: 'png', 
+          background: false 
+        })
+        
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = 'canvas-export.png'
+        link.click()
+        URL.revokeObjectURL(link.href)
+      }}
+    >
+      Export
+    </button>
+  )
+}
+
+const components: TLUiComponents = {
+  SharePanel: ExportButton,
+}
+
+export default function MyApp() {
+  return <Tldraw components={components} />
+}
+```
+
+## Custom menus and dialogs
+
+Use tldraw's menu primitives:
+
+```tsx
+import { 
+  Tldraw, 
+  TLUiComponents,
+  TldrawUiMenuItem,
+  TldrawUiMenuGroup,
+  useEditor 
+} from 'tldraw'
+
+function CustomMenu() {
+  const editor = useEditor()
+
+  return (
+    <TldrawUiMenuGroup id="custom-menu">
+      <TldrawUiMenuItem
+        id="export-png"
+        label="Export as PNG"
+        icon="external-link"
+        onSelect={() => {
+          // Export logic
+        }}
+      />
+      <TldrawUiMenuItem
+        id="clear-canvas"
+        label="Clear canvas"
+        icon="trash"
+        onSelect={() => {
+          editor.deleteShapes(editor.getCurrentPageShapeIds())
+        }}
+      />
+    </TldrawUiMenuGroup>
+  )
+}
+```
+
+## Overriding styles
+
+Customize tldraw's appearance with CSS:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+import './custom-tldraw-styles.css'
+
+export default function MyApp() {
+  return <Tldraw />
+}
+```
+
+```css custom-tldraw-styles.css
+/* Customize toolbar */
+.tlui-toolbar {
+  background: #1e1e1e;
+  border-radius: 12px;
+}
+
+/* Customize buttons */
+.tlui-button {
+  color: #ffffff;
+}
+
+.tlui-button[data-state='selected'] {
+  background: #0066ff;
+}
+
+/* Customize canvas */
+.tl-canvas {
+  background: #f5f5f5;
+}
+
+/* Hide specific elements */
+.tlui-style-panel {
+  display: none;
+}
+```
+
+## Keyboard shortcuts
+
+Add custom keyboard shortcuts:
+
+```tsx
+import { useEditor } from 'tldraw'
+import { useEffect } from 'react'
+
+export function KeyboardShortcuts() {
+  const editor = useEditor()
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + E for export
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault()
+        exportCanvas(editor)
+      }
+
+      // Ctrl/Cmd + Shift + D for duplicate
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'd') {
+        e.preventDefault()
+        editor.duplicateShapes(editor.getSelectedShapeIds())
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [editor])
+
+  return null
+}
+```
+
+## Context menu customization
+
+Modify the right-click context menu:
+
+```tsx
+import { 
+  Tldraw, 
+  TLUiOverrides,
+  menuItem,
+  useEditor 
+} from 'tldraw'
+
+const uiOverrides: TLUiOverrides = {
+  contextMenu(editor, schema, { isMobile }) {
+    // Add custom menu item
+    schema.push(
+      menuItem({
+        id: 'custom-action',
+        label: 'Custom action',
+        icon: 'check',
+        onSelect: () => {
+          console.log('Custom action triggered')
+        },
+      })
+    )
+    return schema
+  },
+}
+
+export default function MyApp() {
+  return <Tldraw overrides={uiOverrides} />
+}
+```
+
+## Dark mode toggle
+
+Add a theme switcher:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import { track } from '@tldraw/state'
+
+const DarkModeToggle = track(() => {
+  const editor = useEditor()
+  const isDarkMode = editor.user.getIsDarkMode()
+
+  return (
+    <button
+      style={{ pointerEvents: 'all' }}
+      onClick={() => {
+        editor.user.updateUserPreferences({ 
+          isDarkMode: !isDarkMode 
+        })
+      }}
+    >
+      {isDarkMode ? '☀️ Light' : '🌙 Dark'}
+    </button>
+  )
+})
+
+const components = {
+  SharePanel: DarkModeToggle,
+}
+
+export default function MyApp() {
+  return <Tldraw components={components} />
+}
+```
+
+## Responsive UI
+
+Adapt UI based on screen size:
+
+```tsx
+import { Tldraw, useEditor, track } from 'tldraw'
+import { useEffect, useState } from 'react'
+
+const ResponsiveUI = track(() => {
+  const editor = useEditor()
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return (
+    <div className={isMobile ? 'mobile-toolbar' : 'desktop-toolbar'}>
+      {isMobile ? (
+        <select 
+          value={editor.getCurrentToolId()}
+          onChange={(e) => editor.setCurrentTool(e.target.value)}
+        >
+          <option value="select">Select</option>
+          <option value="draw">Draw</option>
+          <option value="eraser">Eraser</option>
+        </select>
+      ) : (
+        <>
+          <button onClick={() => editor.setCurrentTool('select')}>Select</button>
+          <button onClick={() => editor.setCurrentTool('draw')}>Draw</button>
+          <button onClick={() => editor.setCurrentTool('eraser')}>Eraser</button>
+        </>
+      )}
+    </div>
+  )
+})
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use track() for reactive components">
+    Always wrap custom UI components with `track()` to ensure they re-render when editor state changes:
+    
+    ```typescript
+    const MyComponent = track(() => {
+      const editor = useEditor()
+      return <div>{editor.getCurrentToolId()}</div>
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Set pointer events">
+    UI elements need `pointerEvents: 'all'` to be interactive:
+    
+    ```typescript
+    <div style={{ pointerEvents: 'all' }}>
+      <button>Click me</button>
+    </div>
+    ```
+  </Accordion>
+
+  <Accordion title="Clean up event listeners">
+    Always remove event listeners in cleanup functions:
+    
+    ```typescript
+    useEffect(() => {
+      const handler = () => {}
+      window.addEventListener('keydown', handler)
+      return () => window.removeEventListener('keydown', handler)
+    }, [])
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom tools" icon="hand-pointer" href="/guides/custom-tools">
+    Add custom tools to your UI
+  </Card>
+  <Card title="Events and side effects" icon="bolt" href="/guides/events-and-side-effects">
+    React to user interactions
+  </Card>
+  <Card title="Persistence" icon="database" href="/guides/persistence">
+    Save and restore UI state
+  </Card>
+</CardGroup>

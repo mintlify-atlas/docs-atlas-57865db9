@@ -1,0 +1,233 @@
+---
+title: EraserTool
+description: Tool for deleting shapes by clicking or dragging over them
+---
+
+# EraserTool
+
+The `EraserTool` allows users to delete shapes by clicking on them or dragging across multiple shapes. It provides an intuitive way to remove content from the canvas.
+
+## Overview
+
+The EraserTool is a simple state machine that:
+- Deletes individual shapes on click
+- Erases multiple shapes by dragging across them
+- Shows a crosshair cursor to indicate eraser mode
+- Provides visual feedback during erasing operations
+
+## Static Properties
+
+<ParamField path="id" type="string" default="'eraser'">
+  The tool identifier
+</ParamField>
+
+<ParamField path="initial" type="string" default="'idle'">
+  Initial child state when the tool is activated
+</ParamField>
+
+<ParamField path="isLockable" type="boolean" default="false">
+  The eraser tool cannot be locked
+</ParamField>
+
+## Child States
+
+The EraserTool has three child states:
+
+- **Idle** - Default state, waiting for user input
+- **Pointing** - User has pressed down but not yet started dragging
+- **Erasing** - User is actively dragging the eraser across shapes
+
+## Lifecycle Methods
+
+### onEnter()
+
+Called when the eraser tool is activated.
+
+```typescript
+onEnter(): void
+```
+
+Sets the cursor to a crosshair to indicate eraser mode:
+
+```typescript
+this.editor.setCursor({ type: 'cross', rotation: 0 })
+```
+
+## Usage Example
+
+```typescript
+import { EraserTool } from '@tldraw/tldraw'
+
+// Activate the eraser tool
+editor.setCurrentTool('eraser')
+
+// Check if eraser tool is active
+const isEraserActive = editor.getCurrentToolId() === 'eraser'
+
+// Switch back to select tool after erasing
+editor.setCurrentTool('select')
+```
+
+## Programmatic Shape Deletion
+
+While the EraserTool provides user interaction, you can also delete shapes programmatically:
+
+```typescript
+// Delete specific shapes by ID
+editor.deleteShapes([shapeId1, shapeId2])
+
+// Delete currently selected shapes
+editor.deleteShapes(editor.getSelectedShapeIds())
+
+// Delete all shapes on current page
+const allShapeIds = editor.getCurrentPageShapeIds()
+editor.deleteShapes(Array.from(allShapeIds))
+
+// Delete shapes matching a condition
+const shapesToDelete = editor.getCurrentPageShapes()
+  .filter(shape => shape.type === 'geo')
+  .map(shape => shape.id)
+editor.deleteShapes(shapesToDelete)
+```
+
+## Keyboard Shortcuts
+
+By default in tldraw:
+- **E** - Activate eraser tool
+- **Delete** or **Backspace** - Delete selected shapes (works in any tool)
+- **X** - Delete selected shapes (alternative)
+
+## Extending EraserTool
+
+You can extend the EraserTool to customize its behavior:
+
+```typescript
+import { EraserTool } from '@tldraw/tldraw'
+
+class MyCustomEraserTool extends EraserTool {
+  override onEnter() {
+    // Set a custom cursor
+    this.editor.setCursor({ type: 'cross', rotation: 45 })
+    
+    // Add custom logic when eraser is activated
+    console.log('Eraser tool activated')
+  }
+  
+  override onExit() {
+    // Clean up or track eraser usage
+    console.log('Eraser tool deactivated')
+  }
+}
+```
+
+## Advanced: Custom Erase Behavior
+
+```typescript
+import { EraserTool, TLShape } from '@tldraw/tldraw'
+
+class SelectiveEraserTool extends EraserTool {
+  // Only allow erasing certain shape types
+  canErase(shape: TLShape): boolean {
+    // For example, prevent erasing locked shapes or specific types
+    return !shape.isLocked && shape.type !== 'frame'
+  }
+}
+```
+
+## Common Patterns
+
+### Confirm Before Deleting
+
+```typescript
+import { EraserTool } from '@tldraw/tldraw'
+
+class ConfirmEraserTool extends EraserTool {
+  override onEnter() {
+    super.onEnter()
+    
+    // Track shapes before erasing
+    this.shapesBeforeErase = new Set(editor.getCurrentPageShapeIds())
+  }
+  
+  override onExit() {
+    const shapesAfterErase = new Set(editor.getCurrentPageShapeIds())
+    const deletedShapes = Array.from(this.shapesBeforeErase)
+      .filter(id => !shapesAfterErase.has(id))
+    
+    if (deletedShapes.length > 0) {
+      console.log(`Erased ${deletedShapes.length} shapes`)
+    }
+  }
+  
+  private shapesBeforeErase: Set<string> = new Set()
+}
+```
+
+### Soft Delete (Hide Instead of Delete)
+
+```typescript
+// Instead of deleting, make shapes invisible
+function softDelete(shapeIds: string[]) {
+  editor.updateShapes(
+    shapeIds.map(id => ({
+      id,
+      type: editor.getShape(id)!.type,
+      opacity: 0,
+      isLocked: true
+    }))
+  )
+}
+
+// Restore hidden shapes
+function restoreHidden() {
+  const hiddenShapes = editor.getCurrentPageShapes()
+    .filter(shape => shape.opacity === 0 && shape.isLocked)
+  
+  editor.updateShapes(
+    hiddenShapes.map(shape => ({
+      id: shape.id,
+      type: shape.type,
+      opacity: 1,
+      isLocked: false
+    }))
+  )
+}
+```
+
+### Undo/Redo Support
+
+The EraserTool automatically supports undo/redo through tldraw's history system:
+
+```typescript
+// Undo last erase operation
+editor.undo()
+
+// Redo erased shapes
+editor.redo()
+
+// Check if undo/redo is available
+const canUndo = editor.getCanUndo()
+const canRedo = editor.getCanRedo()
+```
+
+## Events and Reactions
+
+```typescript
+import { react } from '@tldraw/state'
+
+// React to shape deletions
+const dispose = react('shape deleted', () => {
+  const shapeIds = editor.getCurrentPageShapeIds()
+  console.log(`Current shape count: ${shapeIds.size}`)
+})
+
+// Clean up when done
+dispose()
+```
+
+## See Also
+
+- [StateNode](/api/tools/state-node) - Base class for all tools
+- [SelectTool](/api/tools/select-tool) - Selection tool
+- [Editor.deleteShapes()](/api/editor#deleteShapes) - Programmatic deletion
+- [Shape management](/guides/shapes) - Working with shapes

@@ -1,0 +1,479 @@
+---
+title: Authentication
+description: Secure your multiplayer rooms with authentication
+---
+
+# Authentication
+
+Learn how to add authentication and authorization to your multiplayer rooms to control access and identify users.
+
+## Overview
+
+Authentication for multiplayer involves:
+
+1. **Client authentication** - Passing credentials when connecting
+2. **Server validation** - Verifying credentials and establishing identity
+3. **Access control** - Enforcing read/write permissions
+4. **Session management** - Tracking authenticated users
+
+## Client-side authentication
+
+### Static tokens
+
+Pass authentication tokens in the WebSocket URL:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+
+function MyApp({ roomId, authToken }: { roomId: string; authToken: string }) {
+  const store = useSync({
+    uri: `wss://sync.example.com/room/${roomId}?token=${authToken}`,
+    assets: myAssetStore
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+### Dynamic token refresh
+
+Use a function to fetch tokens dynamically:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+
+function MyApp({ roomId }: { roomId: string }) {
+  const store = useSync({
+    uri: async () => {
+      // Fetch fresh token (e.g., from your auth API)
+      const response = await fetch('/api/auth/token', {
+        credentials: 'include'
+      })
+      const { token } = await response.json()
+      
+      return `wss://sync.example.com/room/${roomId}?token=${token}`
+    },
+    assets: myAssetStore
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+<Note>
+  The URI function is called on each connection attempt, allowing automatic token refresh when reconnecting.
+</Note>
+
+### JWT authentication
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import jwt from 'jsonwebtoken'
+
+function MyApp({ roomId, userId }: { roomId: string; userId: string }) {
+  const store = useSync({
+    uri: async () => {
+      // Generate JWT on client (or fetch from your backend)
+      const token = jwt.sign(
+        { userId, roomId, exp: Math.floor(Date.now() / 1000) + 3600 },
+        process.env.NEXT_PUBLIC_JWT_SECRET!
+      )
+      
+      return `wss://sync.example.com/room/${roomId}?token=${token}`
+    },
+    assets: myAssetStore,
+    userInfo: {
+      id: userId,
+      name: 'User Name',
+      color: '#ff0000'
+    }
+  })
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+## Server-side validation
+
+### Basic token validation
+
+```ts
+import { WebSocketServer } from 'ws'
+import { TLSocketRoom } from '@tldraw/sync-core'
+import { createTLSchema } from '@tldraw/tlschema'
+
+const wss = new WebSocketServer({ port: 8080 })
+const rooms = new Map<string, TLSocketRoom>()
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const roomId = url.pathname.split('/').pop()!
+  const token = url.searchParams.get('token')
+  
+  // Validate token
+  if (!isValidToken(token)) {
+    ws.close(4403, 'Unauthorized')
+    return
+  }
+  
+  const userId = getUserIdFromToken(token!)
+  
+  // Get or create room
+  let room = rooms.get(roomId)
+  if (!room) {
+    room = new TLSocketRoom({
+      schema: createTLSchema(),
+      onSessionRemoved: (room, { numSessionsRemaining }) => {
+        if (numSessionsRemaining === 0) {
+          room.close()
+          rooms.delete(roomId)
+        }
+      }
+    })
+    rooms.set(roomId, room)
+  }
+  
+  // Connect with user metadata
+  room.handleSocketConnect({
+    sessionId: url.searchParams.get('sessionId')!,
+    socket: ws,
+    meta: { userId },
+    isReadonly: false
+  })
+})
+
+function isValidToken(token: string | null): boolean {
+  // Implement your token validation logic
+  return token != null && token.length > 0
+}
+
+function getUserIdFromToken(token: string): string {
+  // Extract user ID from token
+  return 'user-' + token
+}
+```
+
+### JWT validation
+
+```ts
+import jwt from 'jsonwebtoken'
+import { TLSyncErrorCloseEventReason } from '@tldraw/sync-core'
+
+interface JWTPayload {
+  userId: string
+  roomId: string
+  exp: number
+}
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const roomId = url.pathname.split('/').pop()!
+  const token = url.searchParams.get('token')
+  
+  if (!token) {
+    ws.close(4401, TLSyncErrorCloseEventReason.NOT_AUTHENTICATED)
+    return
+  }
+  
+  try {
+    const payload = jwt.verify(
+      token, 
+      process.env.JWT_SECRET!
+    ) as JWTPayload
+    
+    // Verify room access
+    if (payload.roomId !== roomId) {
+      ws.close(4403, TLSyncErrorCloseEventReason.FORBIDDEN)
+      return
+    }
+    
+    // Connect user to room
+    room.handleSocketConnect({
+      sessionId: url.searchParams.get('sessionId')!,
+      socket: ws,
+      meta: { 
+        userId: payload.userId,
+        authenticatedAt: Date.now()
+      },
+      isReadonly: false
+    })
+  } catch (error) {
+    ws.close(4403, TLSyncErrorCloseEventReason.NOT_AUTHENTICATED)
+  }
+})
+```
+
+## Access control
+
+### Read-only access
+
+Restrict certain users to read-only mode:
+
+```ts
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const token = url.searchParams.get('token')
+  const userId = getUserIdFromToken(token!)
+  
+  // Check permissions
+  const hasWriteAccess = await checkWritePermission(userId, roomId)
+  
+  room.handleSocketConnect({
+    sessionId: url.searchParams.get('sessionId')!,
+    socket: ws,
+    meta: { userId },
+    isReadonly: !hasWriteAccess  // Enforce read-only
+  })
+})
+
+async function checkWritePermission(
+  userId: string, 
+  roomId: string
+): Promise<boolean> {
+  // Query your database for permissions
+  const permissions = await db.query(
+    'SELECT can_edit FROM room_permissions WHERE user_id = ? AND room_id = ?',
+    [userId, roomId]
+  )
+  return permissions[0]?.can_edit ?? false
+}
+```
+
+### Room ownership
+
+Enforce room ownership and access lists:
+
+```ts
+interface RoomMetadata {
+  ownerId: string
+  collaborators: string[]
+  isPublic: boolean
+}
+
+const roomMetadata = new Map<string, RoomMetadata>()
+
+wss.on('connection', async (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const roomId = url.pathname.split('/').pop()!
+  const token = url.searchParams.get('token')
+  const userId = getUserIdFromToken(token!)
+  
+  // Load room metadata
+  const metadata = roomMetadata.get(roomId)
+  if (!metadata) {
+    ws.close(4404, TLSyncErrorCloseEventReason.NOT_FOUND)
+    return
+  }
+  
+  // Check access
+  const hasAccess = 
+    metadata.isPublic ||
+    metadata.ownerId === userId ||
+    metadata.collaborators.includes(userId)
+  
+  if (!hasAccess) {
+    ws.close(4403, TLSyncErrorCloseEventReason.FORBIDDEN)
+    return
+  }
+  
+  // Connect with appropriate permissions
+  const isOwner = metadata.ownerId === userId
+  
+  room.handleSocketConnect({
+    sessionId: url.searchParams.get('sessionId')!,
+    socket: ws,
+    meta: { userId, isOwner },
+    isReadonly: !isOwner && !metadata.collaborators.includes(userId)
+  })
+})
+```
+
+## Rate limiting
+
+Protect your server from abuse:
+
+```ts
+import { TLSyncErrorCloseEventReason } from '@tldraw/sync-core'
+
+const connectionCounts = new Map<string, number>()
+const MAX_CONNECTIONS_PER_USER = 5
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const token = url.searchParams.get('token')
+  const userId = getUserIdFromToken(token!)
+  
+  // Check rate limit
+  const currentConnections = connectionCounts.get(userId) || 0
+  if (currentConnections >= MAX_CONNECTIONS_PER_USER) {
+    ws.close(4429, TLSyncErrorCloseEventReason.RATE_LIMITED)
+    return
+  }
+  
+  // Track connection
+  connectionCounts.set(userId, currentConnections + 1)
+  
+  ws.on('close', () => {
+    const count = connectionCounts.get(userId) || 0
+    if (count <= 1) {
+      connectionCounts.delete(userId)
+    } else {
+      connectionCounts.set(userId, count - 1)
+    }
+  })
+  
+  // ... connect to room
+})
+```
+
+## Session tracking
+
+Track active sessions and user activity:
+
+```ts
+interface SessionInfo {
+  userId: string
+  connectedAt: number
+  lastActivity: number
+  ipAddress: string
+}
+
+const activeSessions = new Map<string, SessionInfo>()
+
+const room = new TLSocketRoom({
+  schema: createTLSchema(),
+  
+  onSessionRemoved: (room, { sessionId, meta }) => {
+    // Log session end
+    const session = activeSessions.get(sessionId)
+    if (session) {
+      const duration = Date.now() - session.connectedAt
+      console.log(`Session ${sessionId} ended after ${duration}ms`)
+      activeSessions.delete(sessionId)
+    }
+    
+    // Cleanup room if empty
+    if (room.getNumActiveSessions() === 0) {
+      room.close()
+    }
+  }
+})
+
+wss.on('connection', (ws, req) => {
+  const sessionId = crypto.randomUUID()
+  const userId = getUserIdFromToken(token!)
+  
+  // Track session
+  activeSessions.set(sessionId, {
+    userId,
+    connectedAt: Date.now(),
+    lastActivity: Date.now(),
+    ipAddress: req.socket.remoteAddress!
+  })
+  
+  room.handleSocketConnect({
+    sessionId,
+    socket: ws,
+    meta: { userId },
+    isReadonly: false
+  })
+})
+```
+
+## Complete example
+
+Full authentication implementation:
+
+```ts
+import { WebSocketServer } from 'ws'
+import { TLSocketRoom, TLSyncErrorCloseEventReason } from '@tldraw/sync-core'
+import { createTLSchema } from '@tldraw/tlschema'
+import jwt from 'jsonwebtoken'
+
+interface JWTPayload {
+  userId: string
+  roomId: string
+  permissions: string[]
+}
+
+const wss = new WebSocketServer({ port: 8080 })
+const rooms = new Map<string, TLSocketRoom>()
+
+wss.on('connection', async (ws, req) => {
+  try {
+    const url = new URL(req.url!, `ws://${req.headers.host}`)
+    const roomId = url.pathname.split('/').pop()!
+    const token = url.searchParams.get('token')
+    const sessionId = url.searchParams.get('sessionId')!
+    
+    // Validate token
+    if (!token) {
+      ws.close(4401, TLSyncErrorCloseEventReason.NOT_AUTHENTICATED)
+      return
+    }
+    
+    // Verify JWT
+    const payload = jwt.verify(
+      token,
+      process.env.JWT_SECRET!
+    ) as JWTPayload
+    
+    // Verify room access
+    if (payload.roomId !== roomId) {
+      ws.close(4403, TLSyncErrorCloseEventReason.FORBIDDEN)
+      return
+    }
+    
+    // Get or create room
+    let room = rooms.get(roomId)
+    if (!room) {
+      room = new TLSocketRoom({
+        schema: createTLSchema(),
+        onSessionRemoved: (room, { numSessionsRemaining }) => {
+          if (numSessionsRemaining === 0) {
+            room.close()
+            rooms.delete(roomId)
+          }
+        }
+      })
+      rooms.set(roomId, room)
+    }
+    
+    // Connect with permissions
+    const canEdit = payload.permissions.includes('write')
+    
+    room.handleSocketConnect({
+      sessionId,
+      socket: ws,
+      meta: { 
+        userId: payload.userId,
+        permissions: payload.permissions
+      },
+      isReadonly: !canEdit
+    })
+    
+    console.log(`User ${payload.userId} connected to room ${roomId}`)
+  } catch (error) {
+    console.error('Authentication error:', error)
+    ws.close(4403, TLSyncErrorCloseEventReason.NOT_AUTHENTICATED)
+  }
+})
+
+console.log('Authenticated sync server running on port 8080')
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="server" href="/sync/deployment">
+    Deploy your authenticated server to production
+  </Card>
+  
+  <Card title="Customization" icon="palette" href="/sync/customization">
+    Customize sync behavior and presence
+  </Card>
+  
+  <Card title="Server API" icon="code" href="/sync/api/server">
+    Complete server API reference
+  </Card>
+</CardGroup>

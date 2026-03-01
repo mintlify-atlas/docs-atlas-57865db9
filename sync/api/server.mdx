@@ -1,0 +1,527 @@
+---
+title: Server API
+description: Server-side multiplayer API reference
+---
+
+# Server API
+
+Complete API reference for server-side multiplayer synchronization.
+
+## TLSocketRoom
+
+Server-side room managing WebSocket connections and document synchronization.
+
+```ts
+import { TLSocketRoom } from '@tldraw/sync-core'
+
+const room = new TLSocketRoom(options)
+```
+
+### Constructor parameters
+
+<ParamField path="schema" type="StoreSchema<R, any>" required>
+  Store schema defining record types and migrations.
+  
+  ```ts
+  import { createTLSchema } from '@tldraw/tlschema'
+  
+  const room = new TLSocketRoom({
+    schema: createTLSchema()
+  })
+  ```
+</ParamField>
+
+<ParamField path="storage" type="TLSyncStorage<R>" required>
+  Storage backend for persistence. See [storage options](/sync/setup#storage-options).
+  
+  ```ts
+  import { InMemorySyncStorage } from '@tldraw/sync-core'
+  
+  storage: new InMemorySyncStorage()
+  ```
+</ParamField>
+
+<ParamField path="log" type="TLSyncLog">
+  Optional logger for warnings and errors.
+  
+  ```ts
+  log: {
+    warn: (...args) => console.warn('[SYNC]', ...args),
+    error: (...args) => console.error('[SYNC]', ...args)
+  }
+  ```
+</ParamField>
+
+<ParamField path="onSessionRemoved" type="(room: TLSocketRoom, args: SessionRemovedArgs) => void">
+  Callback when a client disconnects.
+  
+  ```ts
+  onSessionRemoved: (room, { sessionId, numSessionsRemaining, meta }) => {
+    console.log(`User ${meta.userId} disconnected`)
+    
+    if (numSessionsRemaining === 0) {
+      room.close()
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="onBeforeSendMessage" type="(args: MessageArgs) => void">
+  Called before sending each message to a client.
+  
+  ```ts
+  onBeforeSendMessage: ({ sessionId, message, stringified, meta }) => {
+    console.log(`Sending ${message.type} to ${sessionId}, size: ${stringified.length}`)
+  }
+  ```
+</ParamField>
+
+<ParamField path="onPresenceChange" type="() => void">
+  Called when any client's presence data changes.
+  
+  ```ts
+  onPresenceChange: () => {
+    console.log('Presence updated')
+  }
+  ```
+</ParamField>
+
+### Methods
+
+<ResponseField name="handleNewSession" type="(options: NewSessionOptions) => TLSocketRoom">
+  Register a new client session.
+  
+  ```ts
+  room.handleNewSession({
+    sessionId: 'unique-session-id',
+    socket: webSocketAdapter,
+    meta: { userId: 'user-123' },
+    isReadonly: false
+  })
+  ```
+  
+  **Parameters:**
+  - `sessionId` (string, required) - Unique session identifier
+  - `socket` (TLRoomSocket, required) - WebSocket adapter
+  - `meta` (SessionMeta, required) - Application-specific metadata
+  - `isReadonly` (boolean, required) - Whether client can modify documents
+</ResponseField>
+
+<ResponseField name="handleMessage" type="(sessionId: string, message: TLSocketClientSentEvent) => Promise<void>">
+  Process incoming message from a client.
+  
+  ```ts
+  await room.handleMessage(sessionId, message)
+  ```
+  
+  Handles:
+  - `connect` - Initial handshake
+  - `push` - Document changes
+  - `ping` - Keep-alive
+</ResponseField>
+
+<ResponseField name="handleClose" type="(sessionId: string) => void">
+  Handle client disconnection.
+  
+  ```ts
+  room.handleClose(sessionId)
+  ```
+</ResponseField>
+
+<ResponseField name="sendCustomMessage" type="(sessionId: string, data: any) => void">
+  Send custom message to specific client.
+  
+  ```ts
+  room.sendCustomMessage('session-123', {
+    type: 'notification',
+    message: 'Document saved'
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="rejectSession" type="(sessionId: string, reason?: TLSyncErrorCloseEventReason) => void">
+  Reject and disconnect a session.
+  
+  ```ts
+  import { TLSyncErrorCloseEventReason } from '@tldraw/sync-core'
+  
+  room.rejectSession(
+    'session-123',
+    TLSyncErrorCloseEventReason.FORBIDDEN
+  )
+  ```
+</ResponseField>
+
+<ResponseField name="close" type="() => void">
+  Close room and disconnect all clients.
+  
+  ```ts
+  room.close()
+  ```
+</ResponseField>
+
+<ResponseField name="isClosed" type="() => boolean">
+  Check if room is closed.
+  
+  ```ts
+  if (room.isClosed()) {
+    console.log('Room is closed')
+  }
+  ```
+</ResponseField>
+
+### Events
+
+<ResponseField name="events.on" type="(event: string, callback: Function) => () => void">
+  Subscribe to room events. Returns unsubscribe function.
+  
+  ```ts
+  const unsubscribe = room.events.on('room_became_empty', () => {
+    console.log('Last user left')
+    room.close()
+  })
+  
+  const unsubscribe2 = room.events.on('session_removed', ({ sessionId, meta }) => {
+    console.log(`Session ${sessionId} removed`)
+  })
+  ```
+  
+  **Available events:**
+  - `room_became_empty` - Last client disconnected
+  - `session_removed` - Client session ended
+</ResponseField>
+
+### Example
+
+```ts
+import { WebSocketServer } from 'ws'
+import { TLSocketRoom } from '@tldraw/sync-core'
+import { createTLSchema } from '@tldraw/tlschema'
+
+const wss = new WebSocketServer({ port: 8080 })
+const rooms = new Map<string, TLSocketRoom>()
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `wss://${req.headers.host}`)
+  const roomId = url.pathname.split('/').pop()!
+  const sessionId = url.searchParams.get('sessionId')!
+  
+  // Get or create room
+  let room = rooms.get(roomId)
+  if (!room) {
+    room = new TLSocketRoom({
+      schema: createTLSchema(),
+      onSessionRemoved: (room, { numSessionsRemaining }) => {
+        if (numSessionsRemaining === 0) {
+          room.close()
+          rooms.delete(roomId)
+        }
+      },
+      log: {
+        warn: (...args) => console.warn(`[${roomId}]`, ...args),
+        error: (...args) => console.error(`[${roomId}]`, ...args)
+      }
+    })
+    rooms.set(roomId, room)
+  }
+  
+  // Connect client
+  room.handleNewSession({
+    sessionId,
+    socket: ws,
+    meta: { userId: 'anonymous' },
+    isReadonly: false
+  })
+  
+  // Handle messages
+  ws.on('message', async (data) => {
+    const message = JSON.parse(data.toString())
+    await room.handleMessage(sessionId, message)
+  })
+  
+  // Handle disconnect
+  ws.on('close', () => {
+    room.handleClose(sessionId)
+  })
+})
+```
+
+---
+
+## TLSyncRoom
+
+Lower-level room implementation. Most servers should use `TLSocketRoom` instead.
+
+```ts
+import { TLSyncRoom } from '@tldraw/sync-core'
+
+const room = new TLSyncRoom(options)
+```
+
+### Constructor parameters
+
+Similar to `TLSocketRoom` but without WebSocket handling:
+
+<ParamField path="schema" type="StoreSchema<R, any>" required>
+  Store schema.
+</ParamField>
+
+<ParamField path="storage" type="TLSyncStorage<R>" required>
+  Storage backend.
+</ParamField>
+
+<ParamField path="log" type="TLSyncLog">
+  Optional logger.
+</ParamField>
+
+<ParamField path="onPresenceChange" type="() => void">
+  Presence change callback.
+</ParamField>
+
+### Methods
+
+Provides lower-level control over sessions and messaging. See source code at `/home/daytona/workspace/source/packages/sync-core/src/lib/TLSyncRoom.ts:147` for full API.
+
+---
+
+## Storage
+
+### InMemorySyncStorage
+
+In-memory storage for development.
+
+```ts
+import { InMemorySyncStorage } from '@tldraw/sync-core'
+
+const storage = new InMemorySyncStorage()
+```
+
+<Warning>
+  Loses all data on server restart. Only use for development.
+</Warning>
+
+### SQLiteSyncStorage
+
+SQLite-based persistent storage.
+
+```ts
+import { SQLiteSyncStorage, NodeSqliteWrapper } from '@tldraw/sync-core'
+import Database from 'better-sqlite3'
+
+const db = new Database('./rooms.db')
+const sql = new NodeSqliteWrapper(db)
+const storage = new SQLiteSyncStorage({ sql })
+```
+
+**Parameters:**
+- `sql` (TLSyncSqliteWrapper, required) - SQLite wrapper
+- `snapshot` (RoomSnapshot, optional) - Initial snapshot to load
+
+### DurableObjectSqliteSyncWrapper
+
+SQLite wrapper for Cloudflare Durable Objects.
+
+```ts
+import { DurableObjectSqliteSyncWrapper } from '@tldraw/sync-core'
+
+const sql = new DurableObjectSqliteSyncWrapper(durableObject.ctx.storage)
+const storage = new SQLiteSyncStorage({ sql })
+```
+
+### NodeSqliteWrapper
+
+SQLite wrapper for Node.js with better-sqlite3.
+
+```ts
+import { NodeSqliteWrapper } from '@tldraw/sync-core'
+import Database from 'better-sqlite3'
+
+const db = new Database('./room.db')
+const sql = new NodeSqliteWrapper(db)
+```
+
+---
+
+## ServerSocketAdapter
+
+WebSocket adapter for standard WebSocket libraries.
+
+```ts
+import { ServerSocketAdapter } from '@tldraw/sync-core'
+import type { WebSocket } from 'ws'
+
+const adapter = new ServerSocketAdapter({
+  ws: websocket,
+  onBeforeSendMessage: ({ message, stringified }) => {
+    console.log(`Sending ${message.type}`)
+  }
+})
+```
+
+### Constructor parameters
+
+<ParamField path="ws" type="WebSocketMinimal" required>
+  WebSocket instance implementing minimal interface:
+  
+  ```ts
+  interface WebSocketMinimal {
+    send(data: string): void
+    close(code?: number, reason?: string): void
+    addEventListener(event: string, listener: Function): void
+    removeEventListener(event: string, listener: Function): void
+  }
+  ```
+</ParamField>
+
+<ParamField path="onBeforeSendMessage" type="(args: { message: TLSocketServerSentEvent, stringified: string }) => void">
+  Called before sending each message.
+</ParamField>
+
+### Properties
+
+<ResponseField name="isOpen" type="boolean">
+  Whether socket is currently open.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="sendMessage" type="(msg: TLSocketServerSentEvent) => void">
+  Send message to client.
+</ResponseField>
+
+<ResponseField name="close" type="(code?: number, reason?: string) => void">
+  Close socket connection.
+</ResponseField>
+
+---
+
+## Types
+
+### SessionMeta
+
+Application-specific metadata attached to each session.
+
+```ts
+interface MySessionMeta {
+  userId: string
+  permissions: string[]
+  connectedAt: number
+}
+
+const room = new TLSocketRoom<TLRecord, MySessionMeta>({
+  schema: createTLSchema(),
+  onSessionRemoved: (room, { meta }) => {
+    console.log(`User ${meta.userId} disconnected`)
+  }
+})
+```
+
+### TLRoomSocket
+
+Socket interface required by TLSocketRoom.
+
+```ts
+interface TLRoomSocket<R extends UnknownRecord> {
+  isOpen: boolean
+  sendMessage(msg: TLSocketServerSentEvent<R>): void
+  close(code?: number, reason?: string): void
+}
+```
+
+### RoomSnapshot
+
+Complete room state for persistence.
+
+```ts
+interface RoomSnapshot {
+  clock?: number
+  documentClock?: number
+  documents: Array<{
+    state: UnknownRecord
+    lastChangedClock: number
+  }>
+  tombstones?: Record<string, number>
+  tombstoneHistoryStartsAtClock?: number
+  schema?: SerializedSchema
+}
+```
+
+---
+
+## Protocol messages
+
+### Client → Server
+
+```ts
+type TLSocketClientSentEvent =
+  | { type: 'connect'; connectRequestId: string; schema: SerializedSchema; protocolVersion: number; lastServerClock: number }
+  | { type: 'push'; clientClock: number; diff?: NetworkDiff; presence?: [RecordOpType, ObjectDiff | R] }
+  | { type: 'ping' }
+```
+
+### Server → Client
+
+```ts
+type TLSocketServerSentEvent =
+  | { type: 'connect'; connectRequestId: string; hydrationType: 'wipe_all' | 'wipe_presence'; protocolVersion: number; schema: SerializedSchema; serverClock: number; diff: NetworkDiff; isReadonly: boolean }
+  | { type: 'patch'; diff: NetworkDiff; serverClock: number }
+  | { type: 'push_result'; clientClock: number; serverClock: number; action: 'commit' | 'discard' | { rebaseWithDiff: NetworkDiff } }
+  | { type: 'pong' }
+  | { type: 'data'; data: TLSocketServerSentDataEvent[] }
+  | { type: 'custom'; data: any }
+```
+
+---
+
+## Error codes
+
+```ts
+import { TLSyncErrorCloseEventCode, TLSyncErrorCloseEventReason } from '@tldraw/sync-core'
+
+// Close code (4099)
+TLSyncErrorCloseEventCode
+
+// Error reasons
+TLSyncErrorCloseEventReason.NOT_FOUND         // 'NOT_FOUND'
+TLSyncErrorCloseEventReason.FORBIDDEN         // 'FORBIDDEN'
+TLSyncErrorCloseEventReason.NOT_AUTHENTICATED // 'NOT_AUTHENTICATED'
+TLSyncErrorCloseEventReason.UNKNOWN_ERROR     // 'UNKNOWN_ERROR'
+TLSyncErrorCloseEventReason.CLIENT_TOO_OLD    // 'CLIENT_TOO_OLD'
+TLSyncErrorCloseEventReason.SERVER_TOO_OLD    // 'SERVER_TOO_OLD'
+TLSyncErrorCloseEventReason.INVALID_RECORD    // 'INVALID_RECORD'
+TLSyncErrorCloseEventReason.RATE_LIMITED      // 'RATE_LIMITED'
+TLSyncErrorCloseEventReason.ROOM_FULL         // 'ROOM_FULL'
+```
+
+Usage:
+
+```ts
+if (!hasPermission(userId, roomId)) {
+  socket.close(
+    TLSyncErrorCloseEventCode,
+    TLSyncErrorCloseEventReason.FORBIDDEN
+  )
+}
+```
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Client API" icon="code" href="/sync/api/client">
+    Client-side API reference
+  </Card>
+  
+  <Card title="Store sync" icon="database" href="/sync/api/store-sync">
+    Storage API reference
+  </Card>
+  
+  <Card title="Setup guide" icon="wrench" href="/sync/setup">
+    Server setup guide
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/sync/authentication">
+    Add authentication
+  </Card>
+</CardGroup>

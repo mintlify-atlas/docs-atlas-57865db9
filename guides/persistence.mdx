@@ -1,0 +1,777 @@
+---
+title: Persistence
+description: Learn how to save and restore tldraw editor state
+---
+
+Persist your tldraw editor content across sessions using local storage, snapshots, or custom backends.
+
+## Overview
+
+tldraw provides multiple ways to persist data:
+
+- **Persistence key**: Automatic local storage persistence
+- **Snapshots**: Manual save/load with full control
+- **Store events**: Sync to custom backends
+
+## Quick start with persistence key
+
+The simplest way to persist data is using the `persistenceKey` prop:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function MyApp() {
+  return (
+    <Tldraw persistenceKey="my-app" />
+  )
+}
+```
+
+This automatically:
+- Saves all changes to IndexedDB
+- Restores content when the page reloads
+- Handles schema migrations
+
+<Tip>
+  Use unique persistence keys for different documents or users to avoid data conflicts.
+</Tip>
+
+## Using different persistence keys
+
+```tsx
+import { Tldraw } from 'tldraw'
+
+function DocumentEditor({ documentId }: { documentId: string }) {
+  // Each document gets its own storage
+  const persistenceKey = `document-${documentId}`
+  
+  return <Tldraw persistenceKey={persistenceKey} />
+}
+
+// Usage
+function App() {
+  return (
+    <>
+      <DocumentEditor documentId="doc-1" />
+      <DocumentEditor documentId="doc-2" />
+    </>
+  )
+}
+```
+
+## Snapshots
+
+For more control, use snapshots to manually save and restore state:
+
+<Steps>
+  <Step title="Save a snapshot">
+    ```tsx
+    import { getSnapshot, useEditor } from 'tldraw'
+
+    function SaveButton() {
+      const editor = useEditor()
+
+      const handleSave = () => {
+        // Get current state
+        const { document, session } = getSnapshot(editor.store)
+        
+        // Save to storage
+        localStorage.setItem('my-snapshot', JSON.stringify({ document, session }))
+        
+        console.log('Saved!')
+      }
+
+      return <button onClick={handleSave}>Save</button>
+    }
+    ```
+  </Step>
+
+  <Step title="Load a snapshot">
+    ```tsx
+    import { loadSnapshot, useEditor } from 'tldraw'
+
+    function LoadButton() {
+      const editor = useEditor()
+
+      const handleLoad = () => {
+        const saved = localStorage.getItem('my-snapshot')
+        if (!saved) return alert('No saved state found')
+
+        const snapshot = JSON.parse(saved)
+        loadSnapshot(editor.store, snapshot)
+        
+        console.log('Loaded!')
+      }
+
+      return <button onClick={handleLoad}>Load</button>
+    }
+    ```
+  </Step>
+
+  <Step title="Load initial snapshot">
+    ```tsx
+    import { Tldraw, TLEditorSnapshot } from 'tldraw'
+    import initialSnapshot from './snapshot.json'
+
+    export default function MyApp() {
+      return (
+        <Tldraw 
+          snapshot={initialSnapshot as TLEditorSnapshot}
+        />
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+## Document vs Session state
+
+Snapshots contain two parts:
+
+<Tabs>
+  <Tab title="Document">
+    ```typescript
+    const { document } = getSnapshot(editor.store)
+    ```
+    
+    Document state includes:
+    - Shapes
+    - Pages
+    - Assets (images, videos)
+    - Bindings
+    
+    This is what you typically want to save and share.
+  </Tab>
+
+  <Tab title="Session">
+    ```typescript
+    const { session } = getSnapshot(editor.store)
+    ```
+    
+    Session state includes:
+    - Current page
+    - Camera position and zoom
+    - Selected shapes
+    - UI state
+    
+    This is user-specific and usually stored separately.
+  </Tab>
+</Tabs>
+
+### Saving document only
+
+```tsx
+import { getSnapshot, loadSnapshot } from 'tldraw'
+
+// Save only the document
+function saveDocument(editor: Editor) {
+  const { document } = getSnapshot(editor.store)
+  localStorage.setItem('document', JSON.stringify({ document }))
+}
+
+// Load only the document (keeps current session state)
+function loadDocument(editor: Editor) {
+  const saved = localStorage.getItem('document')
+  if (!saved) return
+  
+  const { document } = JSON.parse(saved)
+  loadSnapshot(editor.store, { document })
+}
+```
+
+### Saving session separately
+
+```tsx
+// Save session per user
+function saveUserSession(editor: Editor, userId: string) {
+  const { session } = getSnapshot(editor.store)
+  localStorage.setItem(`session-${userId}`, JSON.stringify({ session }))
+}
+
+// Load user's session
+function loadUserSession(editor: Editor, userId: string) {
+  const saved = localStorage.getItem(`session-${userId}`)
+  if (!saved) return
+  
+  const { session } = JSON.parse(saved)
+  loadSnapshot(editor.store, { session })
+}
+```
+
+## Auto-save implementation
+
+Implement auto-save with debouncing:
+
+```tsx
+import { useEffect, useRef, useState } from 'react'
+import { Editor, Tldraw, getSnapshot } from 'tldraw'
+
+function useAutoSave(editor: Editor | undefined, documentId: string) {
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const timeoutRef = useRef<NodeJS.Timeout>()
+
+  useEffect(() => {
+    if (!editor) return
+
+    const handleChange = () => {
+      // Clear previous timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      // Debounce save by 2 seconds
+      timeoutRef.current = setTimeout(() => {
+        const { document } = getSnapshot(editor.store)
+        localStorage.setItem(
+          `autosave-${documentId}`, 
+          JSON.stringify({ document })
+        )
+        setLastSaved(new Date())
+      }, 2000)
+    }
+
+    const cleanup = editor.store.listen(handleChange, { 
+      source: 'user', 
+      scope: 'document' 
+    })
+
+    return () => {
+      cleanup()
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [editor, documentId])
+
+  return lastSaved
+}
+
+export default function AutoSaveApp({ documentId }: { documentId: string }) {
+  const [editor, setEditor] = useState<Editor>()
+  const lastSaved = useAutoSave(editor, documentId)
+
+  return (
+    <div>
+      {lastSaved && (
+        <div className="save-indicator">
+          Last saved: {lastSaved.toLocaleTimeString()}
+        </div>
+      )}
+      <Tldraw onMount={setEditor} />
+    </div>
+  )
+}
+```
+
+## Backend persistence
+
+Save to a backend server:
+
+```tsx
+import { useEffect, useRef, useState } from 'react'
+import { Editor, Tldraw, getSnapshot, loadSnapshot } from 'tldraw'
+
+function useBackendSync(editor: Editor | undefined, documentId: string) {
+  const timeoutRef = useRef<NodeJS.Timeout>()
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Load initial data
+  useEffect(() => {
+    if (!editor) return
+
+    async function loadFromBackend() {
+      try {
+        const response = await fetch(`/api/documents/${documentId}`)
+        const data = await response.json()
+        
+        if (data.snapshot) {
+          loadSnapshot(editor.store, data.snapshot)
+        }
+      } catch (error) {
+        console.error('Failed to load:', error)
+      }
+    }
+
+    loadFromBackend()
+  }, [editor, documentId])
+
+  // Auto-save changes
+  useEffect(() => {
+    if (!editor) return
+
+    const handleChange = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      timeoutRef.current = setTimeout(async () => {
+        setIsSaving(true)
+        
+        try {
+          const { document, session } = getSnapshot(editor.store)
+          
+          await fetch(`/api/documents/${documentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ document, session }),
+          })
+        } catch (error) {
+          console.error('Failed to save:', error)
+        } finally {
+          setIsSaving(false)
+        }
+      }, 1000)
+    }
+
+    const cleanup = editor.store.listen(handleChange, { 
+      source: 'user', 
+      scope: 'document' 
+    })
+
+    return () => {
+      cleanup()
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [editor, documentId])
+
+  return { isSaving }
+}
+
+export default function BackendSyncApp({ documentId }: { documentId: string }) {
+  const [editor, setEditor] = useState<Editor>()
+  const { isSaving } = useBackendSync(editor, documentId)
+
+  return (
+    <div>
+      {isSaving && <div className="saving-indicator">Saving...</div>}
+      <Tldraw onMount={setEditor} />
+    </div>
+  )
+}
+```
+
+## Export and import
+
+### Export as JSON
+
+```tsx
+import { getSnapshot, useEditor } from 'tldraw'
+
+function ExportButton() {
+  const editor = useEditor()
+
+  const handleExport = () => {
+    const { document } = getSnapshot(editor.store)
+    
+    const blob = new Blob(
+      [JSON.stringify({ document }, null, 2)], 
+      { type: 'application/json' }
+    )
+    
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `tldraw-${Date.now()}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return <button onClick={handleExport}>Export JSON</button>
+}
+```
+
+### Import from JSON
+
+```tsx
+import { loadSnapshot, useEditor } from 'tldraw'
+
+function ImportButton() {
+  const editor = useEditor()
+
+  const handleImport = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      
+      const text = await file.text()
+      const data = JSON.parse(text)
+      
+      loadSnapshot(editor.store, data)
+    }
+    
+    input.click()
+  }
+
+  return <button onClick={handleImport}>Import JSON</button>
+}
+```
+
+### Export as image
+
+```tsx
+import { useEditor } from 'tldraw'
+
+function ExportImageButton() {
+  const editor = useEditor()
+
+  const handleExport = async () => {
+    const shapeIds = editor.getCurrentPageShapeIds()
+    if (shapeIds.size === 0) return alert('No shapes to export')
+    
+    const { blob } = await editor.toImage([...shapeIds], {
+      format: 'png',
+      background: true,
+      padding: 16,
+      scale: 2, // 2x for retina displays
+    })
+    
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `canvas-${Date.now()}.png`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return <button onClick={handleExport}>Export PNG</button>
+}
+```
+
+## Versioning and migrations
+
+Handle schema changes:
+
+```tsx
+import { loadSnapshot, getSnapshot } from 'tldraw'
+
+const CURRENT_VERSION = 2
+
+function saveWithVersion(editor: Editor) {
+  const snapshot = getSnapshot(editor.store)
+  
+  localStorage.setItem('my-app-data', JSON.stringify({
+    version: CURRENT_VERSION,
+    snapshot,
+    savedAt: Date.now(),
+  }))
+}
+
+function loadWithMigration(editor: Editor) {
+  const saved = localStorage.getItem('my-app-data')
+  if (!saved) return
+  
+  const data = JSON.parse(saved)
+  
+  // Check version and migrate if needed
+  if (data.version < CURRENT_VERSION) {
+    const migrated = migrateData(data, CURRENT_VERSION)
+    loadSnapshot(editor.store, migrated.snapshot)
+  } else {
+    loadSnapshot(editor.store, data.snapshot)
+  }
+}
+
+function migrateData(data: any, targetVersion: number) {
+  let current = data
+  
+  // Apply migrations sequentially
+  if (current.version === 1 && targetVersion >= 2) {
+    current = migrateV1ToV2(current)
+  }
+  
+  return current
+}
+
+function migrateV1ToV2(data: any) {
+  // Apply migration logic
+  return {
+    version: 2,
+    snapshot: data.snapshot,
+    savedAt: data.savedAt,
+  }
+}
+```
+
+## Conflict resolution
+
+Handle concurrent edits:
+
+```tsx
+import { getSnapshot, loadSnapshot } from 'tldraw'
+
+interface SavedData {
+  snapshot: any
+  timestamp: number
+  userId: string
+}
+
+async function saveWithConflictCheck(
+  editor: Editor, 
+  documentId: string,
+  userId: string
+) {
+  const localSnapshot = getSnapshot(editor.store)
+  
+  // Get server version
+  const response = await fetch(`/api/documents/${documentId}`)
+  const serverData: SavedData = await response.json()
+  
+  // Check if server has newer changes
+  const lastLocalSave = parseInt(localStorage.getItem('last-save-time') || '0')
+  
+  if (serverData.timestamp > lastLocalSave && serverData.userId !== userId) {
+    // Conflict detected
+    const shouldOverwrite = confirm(
+      'The document was modified by another user. Overwrite their changes?'
+    )
+    
+    if (!shouldOverwrite) {
+      // Load server version
+      loadSnapshot(editor.store, serverData.snapshot)
+      return
+    }
+  }
+  
+  // Save to server
+  await fetch(`/api/documents/${documentId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      snapshot: localSnapshot,
+      timestamp: Date.now(),
+      userId,
+    }),
+  })
+  
+  localStorage.setItem('last-save-time', Date.now().toString())
+}
+```
+
+## Multiple storage backends
+
+```tsx
+import { getSnapshot, loadSnapshot, Editor } from 'tldraw'
+
+interface StorageBackend {
+  save(documentId: string, snapshot: any): Promise<void>
+  load(documentId: string): Promise<any>
+}
+
+class LocalStorageBackend implements StorageBackend {
+  async save(documentId: string, snapshot: any) {
+    localStorage.setItem(`doc-${documentId}`, JSON.stringify(snapshot))
+  }
+
+  async load(documentId: string) {
+    const data = localStorage.getItem(`doc-${documentId}`)
+    return data ? JSON.parse(data) : null
+  }
+}
+
+class FirebaseBackend implements StorageBackend {
+  async save(documentId: string, snapshot: any) {
+    // Save to Firebase
+    await firebase.firestore()
+      .collection('documents')
+      .doc(documentId)
+      .set({ snapshot })
+  }
+
+  async load(documentId: string) {
+    const doc = await firebase.firestore()
+      .collection('documents')
+      .doc(documentId)
+      .get()
+    
+    return doc.data()?.snapshot
+  }
+}
+
+function usePersistence(
+  editor: Editor | undefined,
+  documentId: string,
+  backend: StorageBackend
+) {
+  useEffect(() => {
+    if (!editor) return
+
+    // Load on mount
+    backend.load(documentId).then(snapshot => {
+      if (snapshot) {
+        loadSnapshot(editor.store, snapshot)
+      }
+    })
+
+    // Save on changes
+    const handleChange = debounce(() => {
+      const snapshot = getSnapshot(editor.store)
+      backend.save(documentId, snapshot)
+    }, 1000)
+
+    const cleanup = editor.store.listen(handleChange, {
+      source: 'user',
+      scope: 'document'
+    })
+
+    return cleanup
+  }, [editor, documentId, backend])
+}
+```
+
+## Offline support
+
+```tsx
+import { getSnapshot, loadSnapshot } from 'tldraw'
+
+function useOfflineSync(editor: Editor | undefined, documentId: string) {
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const pendingChanges = useRef<any[]>([])
+
+  // Track online status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // Sync when coming back online
+  useEffect(() => {
+    if (!editor || !isOnline || pendingChanges.current.length === 0) return
+
+    async function syncPendingChanges() {
+      const snapshot = getSnapshot(editor!.store)
+      
+      try {
+        await fetch(`/api/documents/${documentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(snapshot),
+        })
+        
+        pendingChanges.current = []
+      } catch (error) {
+        console.error('Failed to sync:', error)
+      }
+    }
+
+    syncPendingChanges()
+  }, [isOnline, editor, documentId])
+
+  // Save to local storage when offline
+  useEffect(() => {
+    if (!editor) return
+
+    const handleChange = () => {
+      const snapshot = getSnapshot(editor.store)
+      
+      if (isOnline) {
+        // Save to server
+        fetch(`/api/documents/${documentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(snapshot),
+        }).catch(() => {
+          // If fails, add to pending
+          pendingChanges.current.push(snapshot)
+        })
+      } else {
+        // Save locally and mark as pending
+        localStorage.setItem(`offline-${documentId}`, JSON.stringify(snapshot))
+        pendingChanges.current.push(snapshot)
+      }
+    }
+
+    const cleanup = editor.store.listen(debounce(handleChange, 1000), {
+      source: 'user',
+      scope: 'document'
+    })
+
+    return cleanup
+  }, [editor, documentId, isOnline])
+
+  return { isOnline, hasPendingChanges: pendingChanges.current.length > 0 }
+}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use unique persistence keys">
+    Avoid data conflicts by using unique keys:
+    
+    ```tsx
+    // Per document
+    <Tldraw persistenceKey={`doc-${documentId}`} />
+    
+    // Per user and document
+    <Tldraw persistenceKey={`${userId}-doc-${documentId}`} />
+    ```
+  </Accordion>
+
+  <Accordion title="Debounce saves">
+    Prevent excessive saving with debouncing:
+    
+    ```tsx
+    const debouncedSave = debounce((snapshot) => {
+      saveToBackend(snapshot)
+    }, 2000) // Save 2 seconds after last change
+    ```
+  </Accordion>
+
+  <Accordion title="Separate document and session">
+    Store document and session state separately:
+    
+    ```tsx
+    // Document: shared across users
+    const { document } = getSnapshot(editor.store)
+    saveToSharedStorage(document)
+    
+    // Session: per user
+    const { session } = getSnapshot(editor.store)
+    saveToUserStorage(session)
+    ```
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    Always wrap storage operations in try-catch:
+    
+    ```tsx
+    try {
+      const snapshot = getSnapshot(editor.store)
+      await saveToBackend(snapshot)
+    } catch (error) {
+      console.error('Save failed:', error)
+      // Fallback to local storage
+      localStorage.setItem('backup', JSON.stringify(snapshot))
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Multiplayer" icon="users" href="/guides/multiplayer">
+    Real-time persistence with sync
+  </Card>
+  <Card title="Events and side effects" icon="bolt" href="/guides/events-and-side-effects">
+    Auto-save with store events
+  </Card>
+  <Card title="Custom shapes" icon="shapes" href="/guides/custom-shapes">
+    Persist custom shape data
+  </Card>
+</CardGroup>

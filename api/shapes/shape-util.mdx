@@ -1,0 +1,447 @@
+---
+title: ShapeUtil
+description: Base class for creating custom shape utilities in tldraw
+---
+
+The `ShapeUtil` class is the foundation for creating custom shapes in tldraw. Every shape type requires a corresponding ShapeUtil class that defines how the shape behaves, renders, and responds to user interactions.
+
+## Overview
+
+`ShapeUtil` is an abstract class that provides the core functionality for shape handling. You extend this class to create custom shapes or use built-in shape utilities like `ArrowShapeUtil`, `GeoShapeUtil`, etc.
+
+## Type signature
+
+```typescript
+abstract class ShapeUtil<Shape extends TLShape = TLShape>
+```
+
+## Static properties
+
+<ParamField path="type" type="string" required>
+  The unique identifier for this shape type. Must match the shape's type property.
+  
+  ```typescript
+  static override type = 'myShape' as const
+  ```
+</ParamField>
+
+<ParamField path="props" type="RecordProps<TLUnknownShape>">
+  Defines the shape's properties with validation and style information.
+  
+  ```typescript
+  static override props = {
+    color: DefaultColorStyle,
+    text: T.string,
+    w: T.number,
+    h: T.number,
+  }
+  ```
+</ParamField>
+
+<ParamField path="migrations" type="LegacyMigrations | TLPropsMigrations | MigrationSequence">
+  Migrations for updating shape props over time when your shape structure changes.
+</ParamField>
+
+## Constructor
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance that this shape utility is associated with.
+  
+  ```typescript
+  constructor(public editor: Editor)
+  ```
+</ParamField>
+
+## Configuration
+
+<ParamField path="options" type="object" default="{}">
+  Customization options for the shape util. Override this property to provide shape-specific options.
+  
+  ```typescript
+  override options = {
+    showTextOutline: true,
+    autoplay: false,
+  }
+  ```
+</ParamField>
+
+### configure()
+
+Static method to customize shape options without extending the class.
+
+```typescript
+const CustomGeoUtil = GeoShapeUtil.configure({
+  showTextOutline: false,
+})
+```
+
+## Abstract methods (required)
+
+### getDefaultProps()
+
+Returns the default properties for new shapes of this type.
+
+```typescript
+abstract getDefaultProps(): Shape['props']
+```
+
+**Example:**
+```typescript
+getDefaultProps(): MyShape['props'] {
+  return {
+    w: 100,
+    h: 100,
+    color: 'black',
+    text: '',
+  }
+}
+```
+
+### getGeometry()
+
+Returns the geometric representation of the shape for hit testing, bounds calculation, and collision detection.
+
+```typescript
+abstract getGeometry(shape: Shape, opts?: TLGeometryOpts): Geometry2d
+```
+
+<ParamField path="shape" type="Shape" required>
+  The shape to get geometry for
+</ParamField>
+
+<ParamField path="opts" type="TLGeometryOpts">
+  Additional options including context information
+</ParamField>
+
+**Example:**
+```typescript
+getGeometry(shape: MyShape): Geometry2d {
+  return new Rectangle2d({
+    width: shape.props.w,
+    height: shape.props.h,
+    isFilled: true,
+  })
+}
+```
+
+### component()
+
+Returns a React component to render the shape as HTML/SVG.
+
+```typescript
+abstract component(shape: Shape): any
+```
+
+**Example:**
+```typescript
+component(shape: MyShape) {
+  return (
+    <SVGContainer>
+      <rect width={shape.props.w} height={shape.props.h} fill="blue" />
+    </SVGContainer>
+  )
+}
+```
+
+### indicator()
+
+Returns a React component for the selection indicator (shown when shape is selected).
+
+```typescript
+abstract indicator(shape: Shape): any
+```
+
+**Example:**
+```typescript
+indicator(shape: MyShape) {
+  return <rect width={shape.props.w} height={shape.props.h} />
+}
+```
+
+## Capability methods
+
+These methods determine what operations are allowed on the shape.
+
+### canEdit()
+
+```typescript
+canEdit(shape: Shape, info: TLEditStartInfo): boolean
+```
+
+Returns whether the shape can be double-clicked to enter edit mode. Default: `false`
+
+### canResize()
+
+```typescript
+canResize(shape: Shape): boolean
+```
+
+Returns whether the shape can be resized. Default: `true`
+
+### canBind()
+
+```typescript
+canBind(opts: TLShapeUtilCanBindOpts): boolean
+```
+
+Returns whether the shape can participate in bindings (like arrows). Default: `true`
+
+### canCrop()
+
+```typescript
+canCrop(shape: Shape): boolean
+```
+
+Returns whether the shape can be cropped. Default: `false`
+
+### canSnap()
+
+```typescript
+canSnap(shape: Shape): boolean
+```
+
+Returns whether other shapes can snap to this shape. Default: `true`
+
+### canBeLaidOut()
+
+```typescript
+canBeLaidOut(shape: Shape, info: TLShapeUtilCanBeLaidOutOpts): boolean
+```
+
+Returns whether the shape can participate in layout operations (align, distribute, etc.). Default: `true`
+
+## Visual configuration methods
+
+### hideResizeHandles()
+
+```typescript
+hideResizeHandles(shape: Shape): boolean
+```
+
+Returns whether to hide resize handles when selected. Default: `false`
+
+### hideRotateHandle()
+
+```typescript
+hideRotateHandle(shape: Shape): boolean
+```
+
+Returns whether to hide rotation handle when selected. Default: `false`
+
+### hideSelectionBoundsBg()
+
+```typescript
+hideSelectionBoundsBg(shape: Shape): boolean
+```
+
+Returns whether to hide selection bounds background. Default: `false`
+
+### hideSelectionBoundsFg()
+
+```typescript
+hideSelectionBoundsFg(shape: Shape): boolean
+```
+
+Returns whether to hide selection bounds foreground. Default: `false`
+
+### isAspectRatioLocked()
+
+```typescript
+isAspectRatioLocked(shape: Shape): boolean
+```
+
+Returns whether the shape's aspect ratio is locked during resize. Default: `false`
+
+## Indicator rendering
+
+### useLegacyIndicator()
+
+```typescript
+useLegacyIndicator(): boolean
+```
+
+Returns `true` to use SVG-based indicators, `false` to use canvas-based indicators. Default: `true`
+
+### getIndicatorPath()
+
+```typescript
+getIndicatorPath(shape: Shape): TLIndicatorPath | undefined
+```
+
+Returns a Path2D for canvas-based indicator rendering (more efficient than SVG).
+
+**Example:**
+```typescript
+getIndicatorPath(shape: MyShape): Path2D {
+  const path = new Path2D()
+  path.rect(0, 0, shape.props.w, shape.props.h)
+  return path
+}
+```
+
+## Event handlers
+
+### onBeforeCreate()
+
+```typescript
+onBeforeCreate?(next: Shape): Shape | void
+```
+
+Called just before a shape is created. Return a modified shape or void.
+
+### onBeforeUpdate()
+
+```typescript
+onBeforeUpdate?(prev: Shape, next: Shape): Shape | void
+```
+
+Called just before a shape is updated. Return a modified shape or void.
+
+### onResize()
+
+```typescript
+onResize?(
+  shape: Shape,
+  info: TLResizeInfo<Shape>
+): Omit<TLShapePartial<Shape>, 'id' | 'type'> | undefined | void
+```
+
+Called when a shape is resized. Return updated properties.
+
+### onTranslate()
+
+```typescript
+onTranslate?(initial: Shape, current: Shape): TLShapePartial<Shape> | void
+```
+
+Called when a shape is being translated (moved).
+
+### onRotate()
+
+```typescript
+onRotate?(initial: Shape, current: Shape): TLShapePartial<Shape> | void
+```
+
+Called when a shape is being rotated.
+
+### onDoubleClick()
+
+```typescript
+onDoubleClick?(shape: Shape): TLShapePartial<Shape> | void
+```
+
+Called when a shape is double-clicked.
+
+### onEditStart()
+
+```typescript
+onEditStart?(shape: Shape): void
+```
+
+Called when a shape enters edit mode.
+
+### onEditEnd()
+
+```typescript
+onEditEnd?(shape: Shape): void
+```
+
+Called when a shape exits edit mode.
+
+## Export methods
+
+### toSvg()
+
+```typescript
+toSvg?(shape: Shape, ctx: SvgExportContext): ReactElement | null | Promise<ReactElement | null>
+```
+
+Returns an SVG representation of the shape for export.
+
+### getCanvasSvgDefs()
+
+```typescript
+getCanvasSvgDefs(): TLShapeUtilCanvasSvgDef[]
+```
+
+Returns SVG definitions (patterns, gradients, etc.) to add to the canvas.
+
+## Utility methods
+
+### getText()
+
+```typescript
+getText(shape: Shape): string | undefined
+```
+
+Returns the text content of the shape for search and accessibility.
+
+### getHandles()
+
+```typescript
+getHandles?(shape: Shape): TLHandle[]
+```
+
+Returns an array of handles for the shape (like arrow endpoints).
+
+### getFontFaces()
+
+```typescript
+getFontFaces(shape: Shape): TLFontFace[]
+```
+
+Returns font faces needed to render the shape.
+
+### getInterpolatedProps()
+
+```typescript
+getInterpolatedProps?(startShape: Shape, endShape: Shape, progress: number): Shape['props']
+```
+
+Returns interpolated props for animating between two shapes.
+
+## Example: Custom shape
+
+```typescript
+import { ShapeUtil, Rectangle2d, HTMLContainer } from 'tldraw'
+
+type MyShape = TLBaseShape<'myShape', {
+  w: number
+  h: number
+  text: string
+}>
+
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  static override type = 'myShape' as const
+  
+  getDefaultProps(): MyShape['props'] {
+    return { w: 100, h: 100, text: '' }
+  }
+  
+  getGeometry(shape: MyShape) {
+    return new Rectangle2d({
+      width: shape.props.w,
+      height: shape.props.h,
+      isFilled: true,
+    })
+  }
+  
+  component(shape: MyShape) {
+    return (
+      <HTMLContainer>
+        <div style={{
+          width: shape.props.w,
+          height: shape.props.h,
+          border: '2px solid black',
+        }}>
+          {shape.props.text}
+        </div>
+      </HTMLContainer>
+    )
+  }
+  
+  indicator(shape: MyShape) {
+    return <rect width={shape.props.w} height={shape.props.h} />
+  }
+}
+```

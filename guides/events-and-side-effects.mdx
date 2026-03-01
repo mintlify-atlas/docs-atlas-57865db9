@@ -1,0 +1,590 @@
+---
+title: Events and side effects
+description: Learn how to listen to events and implement side effects in tldraw
+---
+
+React to changes in your tldraw editor by listening to events and registering side effects.
+
+## Overview
+
+tldraw provides two main ways to react to changes:
+
+- **Store events**: Listen to changes in shapes, pages, and records
+- **Side effects**: Register handlers that run before/after shape operations
+
+## Store events
+
+Listen to all changes in the editor's store:
+
+<Steps>
+  <Step title="Get the editor instance">
+    ```tsx
+    import { useCallback, useEffect, useState } from 'react'
+    import { Editor, Tldraw } from 'tldraw'
+
+    export default function MyApp() {
+      const [editor, setEditor] = useState<Editor>()
+
+      return (
+        <Tldraw onMount={setEditor} />
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Listen to store changes">
+    ```tsx
+    useEffect(() => {
+      if (!editor) return
+
+      const handleChange = (change) => {
+        // Handle added records
+        for (const record of Object.values(change.changes.added)) {
+          if (record.typeName === 'shape') {
+            console.log('Shape created:', record.type)
+          }
+        }
+
+        // Handle updated records
+        for (const [from, to] of Object.values(change.changes.updated)) {
+          if (from.typeName === 'shape') {
+            console.log('Shape updated:', to.id)
+          }
+        }
+
+        // Handle removed records
+        for (const record of Object.values(change.changes.removed)) {
+          if (record.typeName === 'shape') {
+            console.log('Shape deleted:', record.id)
+          }
+        }
+      }
+
+      // Listen to changes
+      const cleanup = editor.store.listen(handleChange, { 
+        source: 'user',  // Only user changes
+        scope: 'all'     // All changes
+      })
+
+      return cleanup
+    }, [editor])
+    ```
+  </Step>
+</Steps>
+
+## Change event structure
+
+The change event provides before/after snapshots:
+
+```typescript
+import { TLEventMapHandler } from 'tldraw'
+
+const handleChange: TLEventMapHandler<'change'> = (change) => {
+  // Added records
+  change.changes.added // Record<string, TLRecord>
+  
+  // Updated records (from -> to)
+  change.changes.updated // Record<string, [TLRecord, TLRecord]>
+  
+  // Removed records
+  change.changes.removed // Record<string, TLRecord>
+  
+  // Change source
+  change.source // 'user' | 'remote' | 'other'
+}
+```
+
+## Filter store events
+
+Control which events you receive:
+
+<CodeGroup>
+```typescript User changes only
+// Only listen to changes made by the user
+const cleanup = editor.store.listen(handleChange, { 
+  source: 'user', 
+  scope: 'all' 
+})
+```
+
+```typescript Remote changes only
+// Only listen to changes from other users (multiplayer)
+const cleanup = editor.store.listen(handleChange, { 
+  source: 'remote', 
+  scope: 'all' 
+})
+```
+
+```typescript Document changes only
+// Only document changes (shapes, pages)
+const cleanup = editor.store.listen(handleChange, { 
+  source: 'user', 
+  scope: 'document' 
+})
+```
+
+```typescript Session changes only
+// Only session changes (camera, selection)
+const cleanup = editor.store.listen(handleChange, { 
+  source: 'user', 
+  scope: 'session' 
+})
+```
+</CodeGroup>
+
+## Side effects
+
+Side effects run automatically when shapes are created, updated, or deleted.
+
+### After create
+
+Run code after a shape is created:
+
+```tsx
+import { Tldraw } from 'tldraw'
+
+export default function MyApp() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        editor.sideEffects.registerAfterCreateHandler('shape', (shape) => {
+          console.log('Shape created:', shape.type)
+          
+          // Example: Log to analytics
+          analytics.track('shape_created', { type: shape.type })
+        })
+      }}
+    />
+  )
+}
+```
+
+### After change
+
+Run code after a shape is updated:
+
+```tsx
+editor.sideEffects.registerAfterChangeHandler('shape', (prevShape, nextShape) => {
+  console.log('Shape changed from', prevShape, 'to', nextShape)
+  
+  // Example: Save to backend
+  if (prevShape.props.text !== nextShape.props.text) {
+    saveShapeToBackend(nextShape)
+  }
+})
+```
+
+### Before create
+
+Modify or validate shapes before creation:
+
+```tsx
+editor.sideEffects.registerBeforeCreateHandler('shape', (shape) => {
+  // Example: Enforce naming convention
+  if (shape.type === 'text' && !shape.props.text.startsWith('Note:')) {
+    return {
+      ...shape,
+      props: {
+        ...shape.props,
+        text: 'Note: ' + shape.props.text,
+      },
+    }
+  }
+  
+  return shape
+})
+```
+
+### Before change
+
+Validate or modify updates:
+
+```tsx
+editor.sideEffects.registerBeforeChangeHandler('shape', (prevShape, nextShape) => {
+  // Example: Prevent moving locked shapes
+  if (nextShape.props.isLocked && 
+      (nextShape.x !== prevShape.x || nextShape.y !== prevShape.y)) {
+    return prevShape // Reject the change
+  }
+  
+  return nextShape
+})
+```
+
+### Before delete
+
+Prevent or log deletions:
+
+```tsx
+editor.sideEffects.registerBeforeDeleteHandler('shape', (shape) => {
+  // Example: Prevent deleting important shapes
+  if (shape.meta?.isImportant) {
+    console.warn('Cannot delete important shape')
+    return false // Prevent deletion
+  }
+  
+  return // Allow deletion
+})
+```
+
+### After delete
+
+Clean up after deletions:
+
+```tsx
+editor.sideEffects.registerAfterDeleteHandler('shape', (shape) => {
+  console.log('Shape deleted:', shape.id)
+  
+  // Example: Clean up related data
+  deleteRelatedAssets(shape)
+})
+```
+
+## Advanced side effect example
+
+Enforce business rules with side effects:
+
+```tsx
+import { Editor, TLShape, TLShapeId, Tldraw } from 'tldraw'
+
+type ShapeWithColor = Extract<TLShape, { props: { color: string } }>
+
+function ensureOnlyOneRedShape(editor: Editor, shapeId: TLShapeId) {
+  const shape = editor.getShape(shapeId)!
+  
+  // Check if shape is red
+  if (!('color' in shape.props) || shape.props.color !== 'red') return
+
+  // Get the page
+  const pageId = editor.getAncestorPageId(shape.id)!
+
+  // Find other red shapes on same page
+  const otherRedShapes = Array.from(editor.getPageShapeIds(pageId))
+    .map((id) => editor.getShape(id)!)
+    .filter((otherShape): otherShape is ShapeWithColor =>
+      otherShape.id !== shape.id && 
+      'color' in otherShape.props && 
+      otherShape.props.color === 'red'
+    )
+
+  // Set other red shapes to black
+  editor.updateShapes(
+    otherRedShapes.map((shape) => ({
+      id: shape.id,
+      type: shape.type,
+      props: { color: 'black' },
+    }))
+  )
+}
+
+export default function OnlyOneRedShapeApp() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        editor.sideEffects.registerAfterCreateHandler('shape', (shape) => {
+          ensureOnlyOneRedShape(editor, shape.id)
+        })
+        
+        editor.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
+          ensureOnlyOneRedShape(editor, next.id)
+        })
+      }}
+    />
+  )
+}
+```
+
+## Canvas events
+
+Listen to pointer and keyboard events:
+
+```tsx
+import { useEditor } from 'tldraw'
+import { useEffect } from 'react'
+
+function CanvasEventListener() {
+  const editor = useEditor()
+
+  useEffect(() => {
+    const handlePointerMove = () => {
+      const point = editor.inputs.currentScreenPoint
+      console.log('Pointer at:', point.x, point.y)
+    }
+
+    const handlePointerDown = () => {
+      console.log('Pointer down')
+    }
+
+    const handleKeyDown = () => {
+      console.log('Key pressed:', editor.inputs.currentKey)
+    }
+
+    // Note: These are examples - in practice use tool lifecycle methods
+    return () => {
+      // Cleanup if needed
+    }
+  }, [editor])
+
+  return null
+}
+```
+
+<Warning>
+  For handling pointer/keyboard events, prefer creating custom tools instead of listening to raw events.
+</Warning>
+
+## Derived state with signals
+
+Create reactive computed values:
+
+```tsx
+import { useEditor, track } from 'tldraw'
+import { computed } from '@tldraw/state'
+
+const ShapeCounter = track(() => {
+  const editor = useEditor()
+  
+  // Create computed value that auto-updates
+  const shapeCount = computed('shape-count', () => {
+    return editor.getCurrentPageShapeIds().size
+  })
+
+  return <div>Shapes on canvas: {shapeCount.get()}</div>
+})
+```
+
+## Validation and permissions
+
+Implement access control:
+
+```tsx
+export default function RestrictedApp() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        // Prevent deleting shapes
+        editor.sideEffects.registerBeforeDeleteHandler('shape', (shape) => {
+          if (!canUserDeleteShape(shape)) {
+            alert('You do not have permission to delete this shape')
+            return false
+          }
+        })
+
+        // Prevent editing certain shapes
+        editor.sideEffects.registerBeforeChangeHandler('shape', (prev, next) => {
+          if (next.meta?.isProtected && !isAdmin()) {
+            return prev // Reject changes
+          }
+          return next
+        })
+      }}
+    />
+  )
+}
+
+function canUserDeleteShape(shape: TLShape): boolean {
+  // Your permission logic
+  return !shape.meta?.isProtected
+}
+
+function isAdmin(): boolean {
+  // Your admin check
+  return false
+}
+```
+
+## Auto-save with debouncing
+
+Save changes to backend with debouncing:
+
+```tsx
+import { useEffect, useRef } from 'react'
+import { Editor, Tldraw } from 'tldraw'
+
+function useAutoSave(editor: Editor | undefined) {
+  const timeoutRef = useRef<NodeJS.Timeout>()
+
+  useEffect(() => {
+    if (!editor) return
+
+    const handleChange = () => {
+      // Clear previous timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      // Debounce save by 1 second
+      timeoutRef.current = setTimeout(async () => {
+        const snapshot = editor.store.getSnapshot()
+        await saveToBackend(snapshot)
+        console.log('Auto-saved')
+      }, 1000)
+    }
+
+    const cleanup = editor.store.listen(handleChange, { 
+      source: 'user', 
+      scope: 'document' 
+    })
+
+    return () => {
+      cleanup()
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [editor])
+}
+
+async function saveToBackend(snapshot: any) {
+  await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(snapshot),
+  })
+}
+
+export default function AutoSaveApp() {
+  const [editor, setEditor] = useState<Editor>()
+  useAutoSave(editor)
+
+  return <Tldraw onMount={setEditor} />
+}
+```
+
+## Shape metadata tracking
+
+Add metadata when shapes are created:
+
+```tsx
+editor.sideEffects.registerAfterCreateHandler('shape', (shape) => {
+  editor.updateShape({
+    id: shape.id,
+    type: shape.type,
+    meta: {
+      ...shape.meta,
+      createdAt: Date.now(),
+      createdBy: currentUser.id,
+      version: 1,
+    },
+  })
+})
+
+editor.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
+  // Increment version on changes
+  const prevVersion = (prev.meta?.version as number) || 1
+  
+  editor.updateShape({
+    id: next.id,
+    type: next.type,
+    meta: {
+      ...next.meta,
+      updatedAt: Date.now(),
+      updatedBy: currentUser.id,
+      version: prevVersion + 1,
+    },
+  })
+})
+```
+
+## Event logging and analytics
+
+```tsx
+import { Tldraw } from 'tldraw'
+
+export default function AnalyticsApp() {
+  return (
+    <Tldraw
+      onMount={(editor) => {
+        // Track shape creation
+        editor.sideEffects.registerAfterCreateHandler('shape', (shape) => {
+          analytics.track('shape_created', {
+            type: shape.type,
+            timestamp: Date.now(),
+          })
+        })
+
+        // Track shape deletion
+        editor.sideEffects.registerAfterDeleteHandler('shape', (shape) => {
+          analytics.track('shape_deleted', {
+            type: shape.type,
+            timestamp: Date.now(),
+          })
+        })
+
+        // Track all changes
+        const cleanup = editor.store.listen((change) => {
+          const changeCount = 
+            Object.keys(change.changes.added).length +
+            Object.keys(change.changes.updated).length +
+            Object.keys(change.changes.removed).length
+          
+          if (changeCount > 0) {
+            analytics.track('editor_change', { changeCount })
+          }
+        }, { source: 'user', scope: 'all' })
+      }}
+    />
+  )
+}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Clean up listeners">
+    Always return cleanup functions from useEffect:
+    
+    ```tsx
+    useEffect(() => {
+      if (!editor) return
+      
+      const cleanup = editor.store.listen(handler, options)
+      return cleanup // Important!
+    }, [editor])
+    ```
+  </Accordion>
+
+  <Accordion title="Avoid infinite loops">
+    Don't update shapes in after-change handlers without conditions:
+    
+    ```tsx
+    // BAD - infinite loop
+    editor.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
+      editor.updateShape({ id: next.id, ... }) // Triggers another change!
+    })
+    
+    // GOOD - conditional update
+    editor.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
+      if (shouldUpdate(prev, next)) {
+        editor.updateShape({ id: next.id, ... })
+      }
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Use appropriate event scope">
+    Filter events to reduce overhead:
+    
+    ```tsx
+    // Only document changes (shapes, pages)
+    editor.store.listen(handler, { source: 'user', scope: 'document' })
+    
+    // Only session changes (camera, selection)
+    editor.store.listen(handler, { source: 'user', scope: 'session' })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom shapes" icon="shapes" href="/guides/custom-shapes">
+    Create shapes that react to events
+  </Card>
+  <Card title="Persistence" icon="database" href="/guides/persistence">
+    Save changes triggered by events
+  </Card>
+  <Card title="Multiplayer" icon="users" href="/guides/multiplayer">
+    Handle remote events in multiplayer
+  </Card>
+</CardGroup>

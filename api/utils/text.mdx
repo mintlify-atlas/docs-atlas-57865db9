@@ -1,0 +1,289 @@
+---
+title: Text utilities
+description: Utilities for working with text, rich text, and text formatting in tldraw.
+---
+
+Text utilities provide functions for rendering, converting, and manipulating text content in tldraw.
+
+## Rich text rendering
+
+### renderHtmlFromRichText
+
+Renders HTML from a rich text object.
+
+```typescript
+function renderHtmlFromRichText(
+  editor: Editor,
+  richText: TLRichText
+): string
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="richText" type="TLRichText" required>
+  The rich text content to render.
+</ParamField>
+
+**Returns:** HTML string representation of the rich text.
+
+### Example
+
+```typescript
+import { renderHtmlFromRichText } from 'tldraw'
+
+const html = renderHtmlFromRichText(editor, richTextContent)
+// Returns: '<p dir="auto">Hello <strong>world</strong></p>'
+```
+
+### renderHtmlFromRichTextForMeasurement
+
+Renders HTML from rich text wrapped in a measurement container.
+
+```typescript
+function renderHtmlFromRichTextForMeasurement(
+  editor: Editor,
+  richText: TLRichText
+): string
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="richText" type="TLRichText" required>
+  The rich text content to render.
+</ParamField>
+
+**Returns:** HTML string wrapped in a div with the `tl-rich-text` class for measurement purposes.
+
+### Example
+
+```typescript
+import { renderHtmlFromRichTextForMeasurement } from 'tldraw'
+
+const html = renderHtmlFromRichTextForMeasurement(editor, richTextContent)
+// Returns: '<div class="tl-rich-text"><p dir="auto">Hello world</p></div>'
+```
+
+### renderPlaintextFromRichText
+
+Extracts plaintext from a rich text object.
+
+```typescript
+function renderPlaintextFromRichText(
+  editor: Editor,
+  richText: TLRichText
+): string
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="richText" type="TLRichText" required>
+  The rich text content to convert.
+</ParamField>
+
+**Returns:** Plain text string with formatting removed.
+
+### Example
+
+```typescript
+import { renderPlaintextFromRichText } from 'tldraw'
+
+const plaintext = renderPlaintextFromRichText(editor, richTextContent)
+// Returns: 'Hello world' (no HTML formatting)
+```
+
+### renderRichTextFromHTML
+
+Converts HTML to rich text format.
+
+```typescript
+function renderRichTextFromHTML(
+  editor: Editor,
+  html: string
+): TLRichText
+```
+
+<ParamField path="editor" type="Editor" required>
+  The editor instance.
+</ParamField>
+
+<ParamField path="html" type="string" required>
+  The HTML string to convert.
+</ParamField>
+
+**Returns:** A TLRichText object.
+
+### Example
+
+```typescript
+import { renderRichTextFromHTML } from 'tldraw'
+
+const richText = renderRichTextFromHTML(
+  editor,
+  '<p>Hello <strong>world</strong></p>'
+)
+```
+
+## Text utilities
+
+### isRightToLeftLanguage
+
+Detects if text contains right-to-left language characters.
+
+```typescript
+function isRightToLeftLanguage(text: string): boolean
+```
+
+<ParamField path="text" type="string" required>
+  The text to check.
+</ParamField>
+
+**Returns:** `true` if the text contains RTL characters (Arabic, Hebrew, etc.), `false` otherwise.
+
+### Example
+
+```typescript
+import { isRightToLeftLanguage } from 'tldraw'
+
+isRightToLeftLanguage('Hello') // false
+isRightToLeftLanguage('مرحبا') // true (Arabic)
+isRightToLeftLanguage('שלום') // true (Hebrew)
+```
+
+### convertCommonTitleHTMLEntities
+
+Converts common HTML entities found in web page titles to regular characters.
+
+```typescript
+function convertCommonTitleHTMLEntities(text: string): string
+```
+
+<ParamField path="text" type="string" required>
+  The text containing HTML entities.
+</ParamField>
+
+**Returns:** Text with HTML entities converted to their character equivalents.
+
+### Example
+
+```typescript
+import { convertCommonTitleHTMLEntities } from 'tldraw'
+
+convertCommonTitleHTMLEntities('This &amp; that')
+// Returns: 'This & that'
+
+convertCommonTitleHTMLEntities('Quote: &quot;hello&quot;')
+// Returns: 'Quote: "hello"'
+
+convertCommonTitleHTMLEntities('Em dash &#8212; here')
+// Returns: 'Em dash — here'
+```
+
+### truncateStringWithEllipsis
+
+Truncates a string to a maximum length and adds ellipsis if needed.
+
+```typescript
+function truncateStringWithEllipsis(
+  str: string,
+  maxLength: number
+): string
+```
+
+<ParamField path="str" type="string" required>
+  The string to truncate.
+</ParamField>
+
+<ParamField path="maxLength" type="number" required>
+  The maximum length including the ellipsis.
+</ParamField>
+
+**Returns:** The truncated string with '...' appended if it exceeds maxLength.
+
+### Example
+
+```typescript
+import { truncateStringWithEllipsis } from 'tldraw'
+
+truncateStringWithEllipsis('Hello world', 8)
+// Returns: 'Hello...'
+
+truncateStringWithEllipsis('Hello', 10)
+// Returns: 'Hello'
+```
+
+## TipTap extensions
+
+### tipTapDefaultExtensions
+
+Default TipTap extensions used by the tldraw editor for rich text editing.
+
+```typescript
+const tipTapDefaultExtensions: Extensions
+```
+
+Includes:
+- StarterKit (paragraph, bold, italic, links, lists, etc.)
+- Highlight extension for text highlighting
+- KeyboardShiftEnterTweakExtension for handling Shift+Enter
+- TextDirection extension for automatic text direction
+
+### Example
+
+```typescript
+import { tipTapDefaultExtensions } from 'tldraw'
+
+// Use default extensions
+const extensions = tipTapDefaultExtensions
+
+// Or customize by filtering/adding extensions
+const customExtensions = [
+  ...tipTapDefaultExtensions,
+  MyCustomExtension
+]
+```
+
+## Font management
+
+### defaultAddFontsFromNode
+
+Visitor function for extracting font information from rich text nodes.
+
+```typescript
+function defaultAddFontsFromNode(
+  node: Node,
+  state: RichTextFontVisitorState,
+  addFont: (font: TLFontFace) => void
+): RichTextFontVisitorState
+```
+
+<ParamField path="node" type="Node" required>
+  The TipTap Node to process.
+</ParamField>
+
+<ParamField path="state" type="RichTextFontVisitorState" required>
+  Current font visitor state (family, style, weight).
+</ParamField>
+
+<ParamField path="addFont" type="(font: TLFontFace) => void" required>
+  Callback to register a font face.
+</ParamField>
+
+**Returns:** Updated font visitor state.
+
+### Example
+
+```typescript
+import { defaultAddFontsFromNode } from 'tldraw'
+
+const fonts = new Set()
+const addFont = (font) => fonts.add(font)
+
+let state = { family: 'tldraw_draw', style: 'normal', weight: 'normal' }
+state = defaultAddFontsFromNode(node, state, addFont)
+```

@@ -1,0 +1,351 @@
+---
+title: NoteShapeUtil
+description: Shape utility for sticky note shapes with auto-sizing text
+---
+
+`NoteShapeUtil` handles sticky note shapes with automatic text sizing, font adjustment, shadows, and keyboard navigation.
+
+## Type signature
+
+```typescript
+class NoteShapeUtil extends ShapeUtil<TLNoteShape>
+```
+
+## Features
+
+- Sticky note appearance with shadows
+- Auto-sizing text with font scaling
+- Color themes for note backgrounds
+- Clone handles for quick duplication
+- Keyboard navigation (Tab, Ctrl+Enter)
+- Vertical text growth (growY)
+- Optional URL linking
+- Configurable resize modes
+
+## Configuration options
+
+```typescript
+interface NoteShapeOptions {
+  /**
+   * How should the note shape resize? By default it does not resize
+   * (except automatically based on its text content), but you can set it
+   * to be user-resizable using scale.
+   */
+  resizeMode: 'none' | 'scale' // default: 'none'
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLNoteShape['props'] {
+  return {
+    color: 'black',
+    richText: toRichText(''),
+    size: 'm',
+    font: 'draw',
+    align: 'middle',
+    verticalAlign: 'middle',
+    labelColor: 'black',
+    growY: 0,
+    fontSizeAdjustment: 0,
+    url: '',
+    scale: 1,
+  }
+}
+```
+
+## Properties
+
+<ParamField path="color" type="TLDefaultColorStyle" default="'black'">
+  Background color of the note.
+</ParamField>
+
+<ParamField path="richText" type="TLRichText" required>
+  Rich text content of the note.
+</ParamField>
+
+<ParamField path="size" type="'s' | 'm' | 'l' | 'xl'" default="'m'">
+  Base font size.
+</ParamField>
+
+<ParamField path="font" type="TLFontStyle" default="'draw'">
+  Font family: `'draw'`, `'sans'`, `'serif'`, or `'mono'`.
+</ParamField>
+
+<ParamField path="align" type="'start' | 'middle' | 'end'" default="'middle'">
+  Horizontal text alignment.
+</ParamField>
+
+<ParamField path="verticalAlign" type="'start' | 'middle' | 'end'" default="'middle'">
+  Vertical text alignment.
+</ParamField>
+
+<ParamField path="labelColor" type="TLDefaultColorStyle" default="'black'">
+  Text color (uses note color's text variant if set to 'black').
+</ParamField>
+
+<ParamField path="growY" type="number" default="0">
+  Additional vertical space when text overflows (automatically calculated).
+</ParamField>
+
+<ParamField path="fontSizeAdjustment" type="number" default="0">
+  Font size reduction when text is too wide (automatically calculated).
+</ParamField>
+
+<ParamField path="url" type="string" default="''">
+  Optional URL for hyperlinking.
+</ParamField>
+
+<ParamField path="scale" type="number" default="1">
+  Scale factor for the note.
+</ParamField>
+
+## Geometry
+
+Notes have fixed width with variable height:
+
+```typescript
+getGeometry(shape: TLNoteShape) {
+  const { labelHeight, labelWidth } = getLabelSize(this.editor, shape)
+  const { scale } = shape.props
+
+  const lh = labelHeight * scale
+  const lw = labelWidth * scale
+  const nw = NOTE_SIZE * scale  // NOTE_SIZE = 200
+  const nh = getNoteHeight(shape)
+
+  return new Group2d({
+    children: [
+      new Rectangle2d({ width: nw, height: nh, isFilled: true }),
+      new Rectangle2d({
+        x: /* aligned based on props.align */,
+        y: /* aligned based on props.verticalAlign */,
+        width: lw,
+        height: lh,
+        isFilled: true,
+        isLabel: true,
+        excludeFromShapeBounds: true,
+      }),
+    ],
+  })
+}
+```
+
+## Handles
+
+Notes have clone handles for quick duplication:
+
+```typescript
+getHandles(shape: TLNoteShape): TLHandle[] {
+  const isCoarsePointer = this.editor.getInstanceState().isCoarsePointer
+  if (isCoarsePointer) return []
+
+  const zoom = this.editor.getEfficientZoomLevel()
+  if (zoom * scale < 0.25) return []
+
+  if (zoom * scale < 0.5) {
+    // Show only bottom handle when zoomed out
+    return [{ id: 'bottom', type: 'clone', /* ... */ }]
+  }
+
+  // Show all four handles
+  return [
+    { id: 'top', type: 'clone', /* ... */ },
+    { id: 'right', type: 'clone', /* ... */ },
+    { id: 'bottom', type: 'clone', /* ... */ },
+    { id: 'left', type: 'clone', /* ... */ },
+  ]
+}
+```
+
+## Methods
+
+### canEdit()
+
+```typescript
+canEdit() {
+  return true
+}
+```
+
+Notes can be double-clicked to edit text.
+
+### hideResizeHandles()
+
+```typescript
+hideResizeHandles() {
+  const { resizeMode } = this.options
+  return resizeMode === 'none'
+}
+```
+
+Hides resize handles by default (unless `resizeMode: 'scale'`).
+
+### isAspectRatioLocked()
+
+```typescript
+isAspectRatioLocked() {
+  return this.options.resizeMode === 'scale'
+}
+```
+
+Locks aspect ratio when scale resize mode is enabled.
+
+### getText()
+
+```typescript
+getText(shape: TLNoteShape) {
+  return renderPlaintextFromRichText(this.editor, shape.props.richText)
+}
+```
+
+### onResize()
+
+```typescript
+onResize(shape: any, info: TLResizeInfo<any>) {
+  const { resizeMode } = this.options
+  switch (resizeMode) {
+    case 'none':
+      return undefined
+    case 'scale':
+      return resizeScaled(shape, info)
+  }
+}
+```
+
+### onBeforeCreate() / onBeforeUpdate()
+
+Automatically adjusts `growY` and `fontSizeAdjustment`:
+
+```typescript
+function getNoteSizeAdjustments(editor: Editor, shape: TLNoteShape) {
+  const { labelHeight, fontSizeAdjustment } = getLabelSize(editor, shape)
+  const growY = Math.max(0, labelHeight - NOTE_SIZE)
+
+  if (growY !== shape.props.growY || fontSizeAdjustment !== shape.props.fontSizeAdjustment) {
+    return {
+      ...shape,
+      props: { ...shape.props, growY, fontSizeAdjustment },
+    }
+  }
+}
+```
+
+## Auto-sizing algorithm
+
+Notes automatically adjust font size when text is too wide:
+
+1. Start with base font size from `size` prop
+2. Measure text width with `disableOverflowWrapBreaking: true`
+3. If text overflows, reduce font size by 1px
+4. Repeat until text fits or font size reaches 14px
+5. Below 14px, enable `overflow-wrap: break-word`
+6. Calculate final `growY` for vertical overflow
+
+## Keyboard navigation
+
+Notes support keyboard shortcuts for creating adjacent notes:
+
+- **Tab** - Create note to the right (Shift+Tab for left)
+- **Ctrl/Cmd + Enter** - Create note below (Shift for above)
+- Respects RTL text direction
+- Accounts for shape rotation
+
+```typescript
+function useNoteKeydownHandler(id: TLShapeId) {
+  return (e: KeyboardEvent) => {
+    const isTab = e.key === 'Tab'
+    const isCmdEnter = (e.metaKey || e.ctrlKey) && e.key === 'Enter'
+    
+    if (isTab || isCmdEnter) {
+      e.preventDefault()
+      
+      const offsetLength = (NOTE_SIZE + editor.options.adjacentShapeMargin + growY) * scale
+      const adjacentCenter = new Vec(
+        isTab ? (e.shiftKey !== isRTL ? -1 : 1) : 0,
+        isCmdEnter ? (e.shiftKey ? -1 : 1) : 0
+      ).mul(offsetLength).rot(pageRotation).add(pageTransform.point())
+      
+      const newNote = getNoteShapeForAdjacentPosition(editor, shape, adjacentCenter, pageRotation)
+      startEditingShapeWithRichText(editor, newNote, { selectAll: true })
+    }
+  }
+}
+```
+
+## Visual styling
+
+### Shadows
+
+Notes have dynamic shadows based on rotation (hidden when zoomed out or in dark mode):
+
+```typescript
+function getNoteShadow(id: string, rotation: number, scale: number) {
+  const random = rng(id)
+  const lift = Math.abs(random()) + 0.5
+  const oy = Math.cos(rotation)
+  // Returns layered box-shadow CSS
+}
+```
+
+## Indicator
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLNoteShape): Path2D {
+  const { scale } = shape.props
+  const path = new Path2D()
+  path.roundRect(0, 0, NOTE_SIZE * scale, getNoteHeight(shape), scale)
+  return path
+}
+```
+
+## Example: Create notes
+
+```typescript
+// Create basic note
+editor.createShape({
+  type: 'note',
+  props: {
+    richText: toRichText('Remember to...'),
+    color: 'yellow',
+  }
+})
+
+// Create large note
+editor.createShape({
+  type: 'note',
+  props: {
+    richText: toRichText('Important meeting notes'),
+    size: 'l',
+    color: 'light-blue',
+    align: 'start',
+    verticalAlign: 'start',
+  }
+})
+
+// Create scaled note (with resizing enabled)
+const CustomNoteUtil = NoteShapeUtil.configure({ resizeMode: 'scale' })
+
+editor.createShape({
+  type: 'note',
+  props: {
+    richText: toRichText('Scaled note'),
+    scale: 1.5,
+  }
+})
+```
+
+## Example: Custom configuration
+
+```typescript
+import { NoteShapeUtil } from 'tldraw'
+
+const CustomNoteUtil = NoteShapeUtil.configure({
+  resizeMode: 'scale', // Allow user scaling
+})
+```

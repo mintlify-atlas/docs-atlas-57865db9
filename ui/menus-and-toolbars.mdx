@@ -1,0 +1,667 @@
+---
+title: Menus and toolbars
+description: Comprehensive guide to customizing menus and toolbars in tldraw
+---
+
+Menus and toolbars are the primary way users interact with the tldraw editor. This guide covers all the built-in menus and toolbars, how to customize them, and how to create your own.
+
+## Toolbars
+
+### Main toolbar
+
+The main toolbar contains drawing tools and shape tools. It automatically handles overflow when there are too many items for the available space.
+
+```tsx
+import { DefaultToolbar } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function MyToolbar() {
+  return <DefaultToolbar />
+}
+```
+
+**Customizing toolbar content:**
+
+```tsx
+import {
+  DefaultToolbar,
+  SelectToolbarItem,
+  HandToolbarItem,
+  DrawToolbarItem,
+  EraserToolbarItem,
+  ArrowToolbarItem,
+  TextToolbarItem,
+  NoteToolbarItem,
+  RectangleToolbarItem,
+  EllipseToolbarItem,
+  TriangleToolbarItem,
+  DiamondToolbarItem,
+  HexagonToolbarItem,
+  StarToolbarItem,
+  CloudToolbarItem,
+  LineToolbarItem,
+  FrameToolbarItem,
+} from 'tldraw'
+
+function CustomToolbar() {
+  return (
+    <DefaultToolbar>
+      <SelectToolbarItem />
+      <HandToolbarItem />
+      <DrawToolbarItem />
+      <EraserToolbarItem />
+      <ArrowToolbarItem />
+      <TextToolbarItem />
+      <NoteToolbarItem />
+      
+      <RectangleToolbarItem />
+      <EllipseToolbarItem />
+      <TriangleToolbarItem />
+      <DiamondToolbarItem />
+      <HexagonToolbarItem />
+      <StarToolbarItem />
+      <CloudToolbarItem />
+      
+      <LineToolbarItem />
+      <FrameToolbarItem />
+    </DefaultToolbar>
+  )
+}
+```
+
+**Vertical toolbar:**
+
+```tsx
+<DefaultToolbar orientation="vertical" />
+```
+
+**Controlling overflow behavior:**
+
+```tsx
+<DefaultToolbar
+  minItems={4}        // Minimum items before overflow
+  maxItems={8}        // Maximum items to show
+  minSizePx={310}     // Minimum size in pixels
+  maxSizePx={470}     // Maximum size in pixels
+/>
+```
+
+### Rich text toolbar
+
+Floating toolbar shown when editing text shapes:
+
+```tsx
+import { DefaultRichTextToolbar } from 'tldraw'
+
+function CustomRichTextToolbar() {
+  return <DefaultRichTextToolbar />
+}
+```
+
+### Image toolbar
+
+Floating toolbar for image shapes:
+
+```tsx
+import { DefaultImageToolbar } from 'tldraw'
+
+function CustomImageToolbar() {
+  return <DefaultImageToolbar />
+}
+```
+
+### Video toolbar
+
+Floating toolbar for video shapes:
+
+```tsx
+import { DefaultVideoToolbar } from 'tldraw'
+
+function CustomVideoToolbar() {
+  return <DefaultVideoToolbar />
+}
+```
+
+## Menus
+
+### Main menu
+
+The main dropdown menu accessed from the menu button:
+
+```tsx
+import { DefaultMainMenu, DefaultMainMenuContent } from 'tldraw'
+
+function CustomMainMenu() {
+  return (
+    <DefaultMainMenu>
+      <DefaultMainMenuContent />
+    </DefaultMainMenu>
+  )
+}
+```
+
+**Adding custom menu items:**
+
+```tsx
+import {
+  DefaultMainMenu,
+  DefaultMainMenuContent,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  useEditor,
+} from 'tldraw'
+
+function CustomMainMenu() {
+  const editor = useEditor()
+  
+  return (
+    <DefaultMainMenu>
+      <DefaultMainMenuContent />
+      <TldrawUiMenuGroup id="custom">
+        <TldrawUiMenuItem
+          id="export-json"
+          label="Export as JSON"
+          icon="code"
+          onSelect={() => {
+            const data = editor.store.serialize('document')
+            console.log('Exported:', data)
+          }}
+        />
+        <TldrawUiMenuItem
+          id="import-json"
+          label="Import from JSON"
+          icon="file"
+          onSelect={() => {
+            // Import logic
+          }}
+        />
+      </TldrawUiMenuGroup>
+    </DefaultMainMenu>
+  )
+}
+```
+
+### Context menu
+
+Right-click menu shown on the canvas:
+
+```tsx
+import { DefaultContextMenu, DefaultContextMenuContent } from 'tldraw'
+
+function CustomContextMenu() {
+  return (
+    <DefaultContextMenu>
+      <DefaultContextMenuContent />
+    </DefaultContextMenu>
+  )
+}
+```
+
+**Adding custom context menu items:**
+
+```tsx
+import {
+  DefaultContextMenu,
+  DefaultContextMenuContent,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  useEditor,
+} from 'tldraw'
+
+function CustomContextMenu() {
+  const editor = useEditor()
+  
+  return (
+    <DefaultContextMenu>
+      <DefaultContextMenuContent />
+      <TldrawUiMenuGroup id="custom">
+        <TldrawUiMenuItem
+          id="custom-action"
+          label="Custom Action"
+          icon="heart"
+          onSelect={() => {
+            const selectedShapes = editor.getSelectedShapes()
+            console.log('Context menu action:', selectedShapes)
+          }}
+        />
+      </TldrawUiMenuGroup>
+    </DefaultContextMenu>
+  )
+}
+```
+
+### Actions menu
+
+Quick actions menu for undo, redo, etc.:
+
+```tsx
+import { DefaultActionsMenu } from 'tldraw'
+
+function CustomActionsMenu() {
+  return <DefaultActionsMenu />
+}
+```
+
+### Help menu
+
+Help and keyboard shortcuts menu:
+
+```tsx
+import { DefaultHelpMenu } from 'tldraw'
+
+function CustomHelpMenu() {
+  return <DefaultHelpMenu />
+}
+```
+
+### Zoom menu
+
+Zoom level controls:
+
+```tsx
+import { DefaultZoomMenu } from 'tldraw'
+
+function CustomZoomMenu() {
+  return <DefaultZoomMenu />
+}
+```
+
+### Page menu
+
+Page management menu:
+
+```tsx
+import { DefaultPageMenu } from 'tldraw'
+
+function CustomPageMenu() {
+  return <DefaultPageMenu />
+}
+```
+
+### Debug menu
+
+Developer debugging menu:
+
+```tsx
+import { DefaultDebugMenu } from 'tldraw'
+
+function CustomDebugMenu() {
+  return <DefaultDebugMenu />
+}
+```
+
+## Menu item components
+
+### TldrawUiMenuItem
+
+Basic clickable menu item:
+
+```tsx
+import { TldrawUiMenuItem } from 'tldraw'
+
+<TldrawUiMenuItem
+  id="my-item"
+  label="My Item"
+  icon="edit"
+  kbd="$e"            // Keyboard shortcut display
+  disabled={false}
+  onSelect={() => console.log('Selected')}
+/>
+```
+
+### TldrawUiMenuGroup
+
+Group of related menu items:
+
+```tsx
+import { TldrawUiMenuGroup, TldrawUiMenuItem } from 'tldraw'
+
+<TldrawUiMenuGroup id="my-group">
+  <TldrawUiMenuItem id="item-1" label="Item 1" />
+  <TldrawUiMenuItem id="item-2" label="Item 2" />
+  <TldrawUiMenuItem id="item-3" label="Item 3" />
+</TldrawUiMenuGroup>
+```
+
+### TldrawUiMenuSubmenu
+
+Nested submenu:
+
+```tsx
+import {
+  TldrawUiMenuSubmenu,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+} from 'tldraw'
+
+<TldrawUiMenuSubmenu
+  id="my-submenu"
+  label="More Options"
+  icon="chevron-right"
+>
+  <TldrawUiMenuGroup id="submenu-group">
+    <TldrawUiMenuItem id="sub-item-1" label="Sub Item 1" />
+    <TldrawUiMenuItem id="sub-item-2" label="Sub Item 2" />
+  </TldrawUiMenuGroup>
+</TldrawUiMenuSubmenu>
+```
+
+### TldrawUiMenuActionItem
+
+Menu item that triggers a registered action:
+
+```tsx
+import { TldrawUiMenuActionItem } from 'tldraw'
+
+<TldrawUiMenuActionItem actionId="copy" />
+<TldrawUiMenuActionItem actionId="paste" />
+<TldrawUiMenuActionItem actionId="delete" disabled={noSelection} />
+```
+
+### TldrawUiMenuCheckboxItem
+
+Checkbox menu item for toggles:
+
+```tsx
+import { TldrawUiMenuCheckboxItem } from 'tldraw'
+
+<TldrawUiMenuCheckboxItem
+  id="toggle-grid"
+  label="Show Grid"
+  checked={isGridVisible}
+  onSelect={() => setIsGridVisible(!isGridVisible)}
+/>
+```
+
+### TldrawUiMenuActionCheckboxItem
+
+Checkbox item that triggers an action:
+
+```tsx
+import { TldrawUiMenuActionCheckboxItem } from 'tldraw'
+
+<TldrawUiMenuActionCheckboxItem
+  actionId="toggle-grid"
+  checked={isGridMode}
+/>
+```
+
+### TldrawUiMenuToolItem
+
+Menu item for selecting a tool:
+
+```tsx
+import { TldrawUiMenuToolItem } from 'tldraw'
+
+<TldrawUiMenuToolItem
+  toolId="select"
+  isSelected={currentTool === 'select'}
+/>
+```
+
+## Pre-built menu item groups
+
+Tldraw provides pre-built menu item groups that you can use:
+
+```tsx
+import {
+  ClipboardMenuGroup,
+  ConversionsMenuGroup,
+  EditMenuSubmenu,
+  ArrangeMenuSubmenu,
+  ReorderMenuSubmenu,
+  SelectAllMenuItem,
+  DeleteMenuItem,
+  DuplicateMenuItem,
+  GroupMenuItem,
+  UngroupMenuItem,
+  ZoomTo100MenuItem,
+  ZoomToFitMenuItem,
+  ZoomToSelectionMenuItem,
+} from 'tldraw'
+
+// Use in your custom menus
+<TldrawUiMenuGroup id="edit">
+  <ClipboardMenuGroup />
+  <SelectAllMenuItem />
+  <DeleteMenuItem />
+</TldrawUiMenuGroup>
+
+<ConversionsMenuGroup />
+<EditMenuSubmenu />
+<ArrangeMenuSubmenu />
+<ReorderMenuSubmenu />
+```
+
+## Complete custom menu example
+
+Here's a complete example of a custom menu with multiple groups:
+
+```tsx
+import {
+  DefaultMainMenu,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  TldrawUiMenuSubmenu,
+  TldrawUiMenuActionItem,
+  TldrawUiMenuCheckboxItem,
+  ClipboardMenuGroup,
+  useEditor,
+  useValue,
+} from 'tldraw'
+
+function CustomMainMenu() {
+  const editor = useEditor()
+  const isGridMode = useValue(
+    'isGridMode',
+    () => editor.getInstanceState().isGridMode,
+    [editor]
+  )
+  
+  return (
+    <DefaultMainMenu>
+      {/* File operations */}
+      <TldrawUiMenuGroup id="file">
+        <TldrawUiMenuItem
+          id="new-document"
+          label="New Document"
+          icon="file"
+          kbd="$n"
+          onSelect={() => {
+            if (confirm('Clear canvas?')) {
+              editor.selectAll()
+              editor.deleteShapes(editor.getSelectedShapeIds())
+            }
+          }}
+        />
+        <TldrawUiMenuItem
+          id="open-document"
+          label="Open Document"
+          icon="folder"
+          kbd="$o"
+          onSelect={() => {
+            // Open file dialog logic
+          }}
+        />
+        <TldrawUiMenuItem
+          id="save-document"
+          label="Save Document"
+          icon="save"
+          kbd="$s"
+          onSelect={() => {
+            // Save logic
+          }}
+        />
+      </TldrawUiMenuGroup>
+      
+      {/* Edit operations */}
+      <TldrawUiMenuGroup id="edit">
+        <ClipboardMenuGroup />
+      </TldrawUiMenuGroup>
+      
+      {/* View options */}
+      <TldrawUiMenuGroup id="view">
+        <TldrawUiMenuCheckboxItem
+          id="toggle-grid"
+          label="Show Grid"
+          checked={isGridMode}
+          onSelect={() => {
+            editor.updateInstanceState({
+              isGridMode: !isGridMode,
+            })
+          }}
+        />
+        <TldrawUiMenuActionItem actionId="toggle-dark-mode" />
+        <TldrawUiMenuActionItem actionId="toggle-focus-mode" />
+      </TldrawUiMenuGroup>
+      
+      {/* Export submenu */}
+      <TldrawUiMenuSubmenu
+        id="export"
+        label="Export"
+        icon="external-link"
+      >
+        <TldrawUiMenuGroup id="export-group">
+          <TldrawUiMenuActionItem actionId="export-as-svg" />
+          <TldrawUiMenuActionItem actionId="export-as-png" />
+          <TldrawUiMenuItem
+            id="export-json"
+            label="Export as JSON"
+            icon="code"
+            onSelect={() => {
+              const data = editor.store.serialize('document')
+              const blob = new Blob(
+                [JSON.stringify(data, null, 2)],
+                { type: 'application/json' }
+              )
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'drawing.json'
+              a.click()
+            }}
+          />
+        </TldrawUiMenuGroup>
+      </TldrawUiMenuSubmenu>
+      
+      {/* Preferences */}
+      <TldrawUiMenuGroup id="preferences">
+        <TldrawUiMenuActionItem actionId="toggle-snap-mode" />
+        <TldrawUiMenuActionItem actionId="toggle-tool-lock" />
+        <TldrawUiMenuActionItem actionId="toggle-reduce-motion" />
+      </TldrawUiMenuGroup>
+    </DefaultMainMenu>
+  )
+}
+```
+
+## Custom toolbar with primitive components
+
+Build a completely custom toolbar using primitive components:
+
+```tsx
+import {
+  TldrawUiToolbar,
+  TldrawUiButton,
+  TldrawUiButtonIcon,
+  useEditor,
+  useValue,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function CustomToolbar() {
+  const editor = useEditor()
+  const currentToolId = useValue(
+    'current tool',
+    () => editor.getCurrentToolId(),
+    [editor]
+  )
+  
+  const tools = [
+    { id: 'select', icon: 'tool-pointer' },
+    { id: 'hand', icon: 'tool-hand' },
+    { id: 'draw', icon: 'tool-pencil' },
+    { id: 'eraser', icon: 'tool-eraser' },
+    { id: 'text', icon: 'tool-text' },
+    { id: 'rectangle', icon: 'geo-rectangle' },
+    { id: 'ellipse', icon: 'geo-ellipse' },
+  ]
+  
+  return (
+    <TldrawUiToolbar
+      orientation="horizontal"
+      className="my-custom-toolbar"
+    >
+      {tools.map((tool) => (
+        <TldrawUiButton
+          key={tool.id}
+          type="tool"
+          isActive={currentToolId === tool.id}
+          onClick={() => editor.setCurrentTool(tool.id)}
+        >
+          <TldrawUiButtonIcon icon={tool.icon} />
+        </TldrawUiButton>
+      ))}
+    </TldrawUiToolbar>
+  )
+}
+
+export default function App() {
+  return (
+    <Tldraw components={{ Toolbar: CustomToolbar }} />
+  )
+}
+```
+
+## Keyboard shortcuts
+
+Add keyboard shortcuts to your custom actions:
+
+```tsx
+const overrides: TLUiOverrides = {
+  actions(editor, actions) {
+    return {
+      ...actions,
+      'my-action': {
+        id: 'my-action',
+        label: 'My Action',
+        kbd: '$e',          // Cmd/Ctrl + E
+        onSelect() {
+          // Action logic
+        },
+      },
+      'another-action': {
+        id: 'another-action',
+        label: 'Another Action',
+        kbd: '$!d',        // Cmd/Ctrl + Shift + D
+        onSelect() {
+          // Action logic
+        },
+      },
+    }
+  },
+}
+```
+
+Keyboard shortcut format:
+- `$` = Cmd (Mac) / Ctrl (Windows/Linux)
+- `!` = Shift
+- `?` = Alt
+- Letters and numbers
+
+Examples:
+- `$c` = Cmd/Ctrl + C
+- `$!s` = Cmd/Ctrl + Shift + S
+- `?a` = Alt + A
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="UI components" icon="cube" href="/ui/components">
+    Complete reference of all UI components
+  </Card>
+  
+  <Card title="Translations" icon="language" href="/ui/translations">
+    Learn about internationalization
+  </Card>
+</CardGroup>

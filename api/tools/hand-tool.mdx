@@ -1,0 +1,213 @@
+---
+title: HandTool
+description: Pan and zoom navigation tool for the tldraw canvas
+---
+
+# HandTool
+
+The `HandTool` allows users to pan around the canvas by clicking and dragging. It also provides multi-click shortcuts for zooming operations.
+
+## Overview
+
+The HandTool is a simple state machine tool that enables:
+- Panning the canvas by dragging
+- Double-click to zoom in
+- Triple-click to zoom out
+- Quadruple-click to reset zoom or fit to screen
+
+## Static Properties
+
+<ParamField path="id" type="string" default="'hand'">
+  The tool identifier
+</ParamField>
+
+<ParamField path="initial" type="string" default="'idle'">
+  Initial child state when the tool is activated
+</ParamField>
+
+<ParamField path="isLockable" type="boolean" default="false">
+  The hand tool cannot be locked
+</ParamField>
+
+## Child States
+
+The HandTool has three child states:
+
+- **Idle** - Default state, waiting for user input
+- **Pointing** - User has pressed down but not yet started dragging
+- **Dragging** - User is actively dragging to pan the canvas
+
+## Event Handlers
+
+### onDoubleClick()
+
+Zooms in on double-click.
+
+```typescript
+onDoubleClick(info: TLClickEventInfo): void
+```
+
+<ParamField path="info" type="TLClickEventInfo" required>
+  Click event information containing phase and point data
+</ParamField>
+
+Zooms in at the current pointer position with a smooth animation (220ms, ease-out quint).
+
+### onTripleClick()
+
+Zooms out on triple-click.
+
+```typescript
+onTripleClick(info: TLClickEventInfo): void
+```
+
+<ParamField path="info" type="TLClickEventInfo" required>
+  Click event information
+</ParamField>
+
+Zooms out from the current pointer position with a smooth animation (320ms, ease-out quint).
+
+### onQuadrupleClick()
+
+Toggles between reset zoom (100%) and zoom to fit on quadruple-click.
+
+```typescript
+onQuadrupleClick(info: TLClickEventInfo): void
+```
+
+<ParamField path="info" type="TLClickEventInfo" required>
+  Click event information
+</ParamField>
+
+If already at 100% zoom, fits all content to screen. Otherwise, resets to 100% zoom at the current pointer position.
+
+## Usage Example
+
+```typescript
+import { HandTool } from '@tldraw/tldraw'
+
+// Activate the hand tool
+editor.setCurrentTool('hand')
+
+// Check if hand tool is active
+const isHandActive = editor.getCurrentToolId() === 'hand'
+
+// Temporarily switch to hand tool (common pattern)
+const previousTool = editor.getCurrentToolId()
+editor.setCurrentTool('hand')
+// ... user pans ...
+editor.setCurrentTool(previousTool)
+```
+
+## Programmatic Panning and Zooming
+
+While the HandTool provides user interaction, you can also pan and zoom programmatically:
+
+```typescript
+// Pan to a specific point
+editor.pan({ x: 100, y: 100 })
+
+// Zoom in/out
+editor.zoomIn()
+editor.zoomOut()
+
+// Zoom to specific level
+editor.setZoomLevel(1.5)
+
+// Reset zoom to 100%
+editor.resetZoom()
+
+// Fit content to screen
+editor.zoomToFit()
+
+// Zoom to specific shapes
+editor.zoomToSelection()
+editor.zoomToShapes([shapeId1, shapeId2])
+
+// Zoom with animation
+editor.zoomIn(currentPoint, {
+  animation: { duration: 220, easing: EASINGS.easeOutQuint }
+})
+```
+
+## Keyboard Shortcuts
+
+By default in tldraw:
+- **H** - Activate hand tool
+- **Space** (hold) - Temporarily activate hand tool
+- **Middle mouse button** - Pan (doesn't require hand tool)
+- **Mouse wheel** - Pan vertically
+- **Shift + Mouse wheel** - Pan horizontally
+- **Ctrl/Cmd + Mouse wheel** - Zoom
+
+## Extending HandTool
+
+You can extend the HandTool to customize its behavior:
+
+```typescript
+import { HandTool, TLClickEventInfo, EASINGS } from '@tldraw/tldraw'
+
+class MyCustomHandTool extends HandTool {
+  override onDoubleClick(info: TLClickEventInfo) {
+    // Custom zoom behavior
+    if (info.phase === 'settle') {
+      const point = this.editor.inputs.getCurrentScreenPoint()
+      this.editor.zoomIn(point, {
+        animation: { duration: 150, easing: EASINGS.linear }
+      })
+    }
+  }
+  
+  override onEnter() {
+    // Set custom cursor
+    this.editor.setCursor({ type: 'grab', rotation: 0 })
+  }
+}
+```
+
+## Common Patterns
+
+### Temporary Hand Tool
+
+```typescript
+// Hold space to temporarily use hand tool
+let previousTool: string
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && !e.repeat) {
+    previousTool = editor.getCurrentToolId()
+    editor.setCurrentTool('hand')
+  }
+})
+
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space' && previousTool) {
+    editor.setCurrentTool(previousTool)
+  }
+})
+```
+
+### Custom Pan Limits
+
+```typescript
+// Limit panning to specific bounds
+const dispose = editor.sideEffects.registerBeforeChangeHandler(
+  'camera',
+  (prev, next) => {
+    const bounds = { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 }
+    
+    return {
+      ...next,
+      x: Math.max(bounds.minX, Math.min(bounds.maxX, next.x)),
+      y: Math.max(bounds.minY, Math.min(bounds.maxY, next.y))
+    }
+  }
+)
+```
+
+## See Also
+
+- [StateNode](/api/tools/state-node) - Base class for all tools
+- [SelectTool](/api/tools/select-tool) - Selection and manipulation tool
+- [ZoomTool](/api/tools/zoom-tool) - Dedicated zoom tool
+- [Editor camera methods](/api/editor#camera) - Programmatic camera control

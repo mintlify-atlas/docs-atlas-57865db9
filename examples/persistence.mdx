@@ -1,0 +1,330 @@
+---
+title: Persistence
+description: Save and restore editor state with local or remote storage
+---
+
+Tldraw provides built-in persistence capabilities to save and restore the editor state. You can use IndexedDB for local storage or implement custom persistence.
+
+## Built-in persistence
+
+Use the `persistenceKey` prop to enable automatic local storage:
+
+```tsx PersistenceKeyExample.tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function PersistenceKeyExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw persistenceKey="example" />
+    </div>
+  )
+}
+```
+
+With this simple setup:
+
+- Editor state is automatically saved to IndexedDB
+- State is restored when the component mounts
+- Changes are persisted in real-time
+- Each `persistenceKey` creates a separate saved document
+
+<Note>
+The `persistenceKey` should be unique for each document. If you have multiple editors, use different keys for each one.
+</Note>
+
+## How it works
+
+When you set a `persistenceKey`:
+
+1. On mount, tldraw loads the saved state from IndexedDB
+2. As users make changes, the state is automatically saved
+3. On next visit, the editor restores to the last saved state
+
+## Multiple documents
+
+You can manage multiple documents by using different persistence keys:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useState } from 'react'
+
+const documents = [
+  { id: 'doc-1', name: 'Design mockups' },
+  { id: 'doc-2', name: 'Flowchart' },
+  { id: 'doc-3', name: 'Whiteboard' },
+]
+
+export default function MultiDocExample() {
+  const [currentDoc, setCurrentDoc] = useState('doc-1')
+
+  return (
+    <div>
+      <div style={{ padding: 10 }}>
+        {documents.map(doc => (
+          <button
+            key={doc.id}
+            onClick={() => setCurrentDoc(doc.id)}
+            style={{
+              fontWeight: currentDoc === doc.id ? 'bold' : 'normal',
+            }}
+          >
+            {doc.name}
+          </button>
+        ))}
+      </div>
+      <div className="tldraw__editor">
+        <Tldraw
+          key={currentDoc}
+          persistenceKey={currentDoc}
+        />
+      </div>
+    </div>
+  )
+}
+```
+
+<Note>
+Use the `key` prop to force React to remount the component when switching documents. This ensures the correct state is loaded.
+</Note>
+
+## Custom persistence
+
+For more control, implement custom persistence using snapshots:
+
+```tsx
+import { Tldraw, TLStoreSnapshot, createTLStore, defaultShapeUtils } from 'tldraw'
+import { useEffect, useState } from 'react'
+import 'tldraw/tldraw.css'
+
+export default function CustomPersistenceExample() {
+  const [store] = useState(() => createTLStore({ shapeUtils: defaultShapeUtils }))
+  const [isLoaded, setIsLoaded] = useState(false)
+
+  useEffect(() => {
+    // Load snapshot from your backend
+    async function loadSnapshot() {
+      const response = await fetch('/api/load-document')
+      const snapshot: TLStoreSnapshot = await response.json()
+      store.loadSnapshot(snapshot)
+      setIsLoaded(true)
+    }
+
+    loadSnapshot()
+  }, [store])
+
+  useEffect(() => {
+    if (!isLoaded) return
+
+    // Save snapshot when changes occur
+    const saveSnapshot = () => {
+      const snapshot = store.getSnapshot()
+      fetch('/api/save-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot),
+      })
+    }
+
+    // Listen for changes
+    const dispose = store.listen(saveSnapshot, { scope: 'document' })
+    return dispose
+  }, [store, isLoaded])
+
+  if (!isLoaded) {
+    return <div>Loading...</div>
+  }
+
+  return (
+    <div className="tldraw__editor">
+      <Tldraw store={store} />
+    </div>
+  )
+}
+```
+
+## Snapshots API
+
+### Get snapshot
+
+Capture the current editor state:
+
+```tsx
+import { Editor } from 'tldraw'
+
+function saveDocument(editor: Editor) {
+  const snapshot = editor.store.getSnapshot()
+  // Save snapshot to your backend
+  localStorage.setItem('my-document', JSON.stringify(snapshot))
+}
+```
+
+### Load snapshot
+
+Restore editor state from a snapshot:
+
+```tsx
+import { Editor, TLStoreSnapshot } from 'tldraw'
+
+function loadDocument(editor: Editor) {
+  const data = localStorage.getItem('my-document')
+  if (data) {
+    const snapshot: TLStoreSnapshot = JSON.parse(data)
+    editor.store.loadSnapshot(snapshot)
+  }
+}
+```
+
+### Partial snapshots
+
+You can also work with partial snapshots to sync only specific changes:
+
+```tsx
+// Get changes since a specific point
+const changes = editor.store.extractingChanges(() => {
+  // Make some changes
+  editor.createShape({ type: 'geo', x: 0, y: 0 })
+})
+
+// Apply changes to another store
+otherEditor.store.applyDiff(changes)
+```
+
+## Export and import
+
+### Export as JSON
+
+```tsx
+import { Editor } from 'tldraw'
+
+function exportToJSON(editor: Editor) {
+  const snapshot = editor.store.getSnapshot()
+  const json = JSON.stringify(snapshot, null, 2)
+  
+  // Download as file
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'drawing.tldr'
+  a.click()
+}
+```
+
+### Import from JSON
+
+```tsx
+import { Editor, TLStoreSnapshot } from 'tldraw'
+
+function importFromJSON(editor: Editor, file: File) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const snapshot: TLStoreSnapshot = JSON.parse(e.target?.result as string)
+    editor.store.loadSnapshot(snapshot)
+  }
+  reader.readAsText(file)
+}
+```
+
+## Database storage
+
+For server-side persistence:
+
+```tsx
+import { TLStoreSnapshot } from 'tldraw'
+
+// Save to database
+async function saveToDatabase(documentId: string, snapshot: TLStoreSnapshot) {
+  await db.documents.update({
+    where: { id: documentId },
+    data: {
+      content: snapshot,
+      updatedAt: new Date(),
+    },
+  })
+}
+
+// Load from database
+async function loadFromDatabase(documentId: string): Promise<TLStoreSnapshot> {
+  const document = await db.documents.findUnique({
+    where: { id: documentId },
+  })
+  return document.content
+}
+```
+
+## Versioning and migrations
+
+Tldraw includes a migration system for handling schema changes:
+
+```tsx
+import { createTLStore, defaultShapeUtils, TLStoreSnapshot } from 'tldraw'
+
+const store = createTLStore({ shapeUtils: defaultShapeUtils })
+
+// Load old snapshot - migrations run automatically
+store.loadSnapshot(oldSnapshot)
+```
+
+Migrations are applied automatically when loading snapshots from older versions.
+
+## Best practices
+
+<CardGroup cols={2}>
+
+<Card title="Debounce saves" icon="clock">
+Avoid saving on every change. Debounce save operations to reduce load.
+</Card>
+
+<Card title="Handle errors" icon="triangle-exclamation">
+Implement error handling for failed save/load operations.
+</Card>
+
+<Card title="Version snapshots" icon="code-branch">
+Store version information with snapshots for backwards compatibility.
+</Card>
+
+<Card title="Compress data" icon="file-zipper">
+Compress snapshots before storing to reduce size.
+</Card>
+
+</CardGroup>
+
+## Debouncing saves
+
+```tsx
+import { useEffect, useRef } from 'react'
+import { Editor } from 'tldraw'
+
+function useDebouncedSave(editor: Editor, delay = 1000) {
+  const timeoutRef = useRef<number>()
+
+  useEffect(() => {
+    const handleChange = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      timeoutRef.current = window.setTimeout(() => {
+        const snapshot = editor.store.getSnapshot()
+        // Save snapshot
+        console.log('Saving...', snapshot)
+      }, delay)
+    }
+
+    const dispose = editor.store.listen(handleChange, { scope: 'document' })
+    return () => {
+      dispose()
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [editor, delay])
+}
+```
+
+## Related
+
+- [Multiplayer](/examples/multiplayer) - Real-time collaboration
+- [Snapshots example](/examples/snapshots) - Advanced snapshot usage
+- [Store reference](/reference/store/Store)

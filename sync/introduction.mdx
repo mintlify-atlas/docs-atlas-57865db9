@@ -1,0 +1,139 @@
+---
+title: Multiplayer overview
+description: Learn about tldraw's real-time multiplayer synchronization system
+---
+
+# Multiplayer overview
+
+The tldraw multiplayer system enables real-time collaboration through WebSocket-based synchronization. Multiple users can work on the same canvas simultaneously with automatic conflict resolution, live cursors, and presence awareness.
+
+## Architecture
+
+The sync system uses a client-server architecture with three main components:
+
+- **Client**: `TLSyncClient` manages local state and bidirectional sync with the server
+- **Server**: `TLSyncRoom` acts as the authoritative source and broadcasts changes
+- **Storage**: Pluggable storage layer for persistence (in-memory, SQLite, or custom)
+
+## How it works
+
+The synchronization follows a git-like push/pull/rebase model:
+
+<Steps>
+  <Step title="Local changes">
+    When you make changes locally, they're immediately applied to your store for responsive UI
+  </Step>
+  
+  <Step title="Push to server">
+    Local changes are sent to the server as diff operations
+  </Step>
+  
+  <Step title="Server validation">
+    The server validates changes and resolves any conflicts
+  </Step>
+  
+  <Step title="Broadcast">
+    Validated changes are broadcast to all other connected clients
+  </Step>
+  
+  <Step title="Rebase on conflict">
+    If conflicts occur, the client undoes local changes, applies server changes, then re-applies local changes on top
+  </Step>
+</Steps>
+
+## Key features
+
+### Real-time synchronization
+
+Changes are synchronized at 30 FPS when collaborating, dropping to 1 FPS when working solo to conserve bandwidth.
+
+### Presence awareness
+
+See live cursors, selections, and viewport positions of other users. The presence system operates independently from document synchronization.
+
+### Conflict resolution
+
+Automatic conflict resolution ensures consistency across all clients. The server acts as the source of truth.
+
+### Optimistic updates
+
+Local changes are applied immediately for responsiveness, then reconciled with the server asynchronously.
+
+### Schema migrations
+
+Built-in support for schema versioning allows clients on different versions to collaborate safely with automatic down-migrations.
+
+## Packages
+
+The multiplayer system is split across two npm packages:
+
+### @tldraw/sync
+
+React hooks and utilities for client-side multiplayer:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+
+const store = useSync({
+  uri: 'wss://myserver.com/sync/room-123',
+  assets: myAssetStore
+})
+```
+
+### @tldraw/sync-core
+
+Core synchronization primitives for both client and server:
+
+```ts
+import { TLSyncClient, TLSyncRoom } from '@tldraw/sync-core'
+```
+
+<Warning>
+  The sync-core package is lower-level. Most applications should use the `useSync` hook from `@tldraw/sync` instead.
+</Warning>
+
+## Connection states
+
+The sync client progresses through several states:
+
+| State | Description |
+|-------|-------------|
+| `loading` | Establishing connection and loading initial state |
+| `synced-remote` | Connected and actively synchronizing |
+| `error` | Connection failed or sync error occurred |
+
+## Protocol
+
+The sync protocol uses WebSocket messages with the following event types:
+
+**Client → Server:**
+- `connect` - Initial handshake with schema and protocol version
+- `push` - Send local changes to server
+- `ping` - Keep-alive message
+
+**Server → Client:**
+- `connect` - Connection acknowledgment with initial state
+- `patch` - Document changes to apply
+- `push_result` - Acknowledgment of client push (commit, discard, or rebase)
+- `pong` - Keep-alive response
+- `data` - Batched data messages for efficiency
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/sync/quickstart">
+    Get multiplayer running in 5 minutes
+  </Card>
+  
+  <Card title="Setup guide" icon="wrench" href="/sync/setup">
+    Detailed setup instructions
+  </Card>
+  
+  <Card title="Client API" icon="code" href="/sync/api/client">
+    Client-side API reference
+  </Card>
+  
+  <Card title="Server API" icon="server" href="/sync/api/server">
+    Server-side API reference
+  </Card>
+</CardGroup>

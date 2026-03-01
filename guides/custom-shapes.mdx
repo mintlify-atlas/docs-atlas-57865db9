@@ -1,0 +1,381 @@
+---
+title: Custom shapes
+description: Learn how to create custom shapes with the tldraw SDK
+---
+
+Custom shapes let you extend tldraw's functionality by defining your own shape types with custom rendering, geometry, and behavior.
+
+## Overview
+
+Creating a custom shape involves:
+
+1. Defining the shape's type and props
+2. Creating a ShapeUtil class
+3. Registering the shape with the editor
+
+## Basic custom shape
+
+<Steps>
+  <Step title="Extend the type system">
+    First, declare your shape's props in the global type map:
+
+    ```typescript
+    const MY_CUSTOM_SHAPE_TYPE = 'my-custom-shape'
+
+    declare module 'tldraw' {
+      export interface TLGlobalShapePropsMap {
+        [MY_CUSTOM_SHAPE_TYPE]: { w: number; h: number; text: string }
+      }
+    }
+    ```
+
+    This tells TypeScript about your shape's properties.
+  </Step>
+
+  <Step title="Define the shape type">
+    Create a type for your shape:
+
+    ```typescript
+    type ICustomShape = TLShape<typeof MY_CUSTOM_SHAPE_TYPE>
+    ```
+  </Step>
+
+  <Step title="Create the ShapeUtil">
+    Extend `ShapeUtil` or `BaseBoxShapeUtil` to define your shape's behavior:
+
+    ```typescript
+    import { ShapeUtil, RecordProps, T, Geometry2d, Rectangle2d, HTMLContainer } from 'tldraw'
+
+    export class MyShapeUtil extends ShapeUtil<ICustomShape> {
+      static override type = MY_CUSTOM_SHAPE_TYPE
+      
+      static override props: RecordProps<ICustomShape> = {
+        w: T.number,
+        h: T.number,
+        text: T.string,
+      }
+
+      getDefaultProps(): ICustomShape['props'] {
+        return {
+          w: 200,
+          h: 200,
+          text: "I'm a shape!",
+        }
+      }
+
+      getGeometry(shape: ICustomShape): Geometry2d {
+        return new Rectangle2d({
+          width: shape.props.w,
+          height: shape.props.h,
+          isFilled: true,
+        })
+      }
+
+      component(shape: ICustomShape) {
+        return <HTMLContainer style={{ backgroundColor: '#efefef' }}>
+          {shape.props.text}
+        </HTMLContainer>
+      }
+
+      indicator(shape: ICustomShape) {
+        return <rect width={shape.props.w} height={shape.props.h} />
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Register with the editor">
+    Pass your shape util to the Tldraw component:
+
+    ```tsx
+    const customShapeUtils = [MyShapeUtil]
+
+    export default function MyApp() {
+      return (
+        <Tldraw
+          shapeUtils={customShapeUtils}
+          onMount={(editor) => {
+            editor.createShape({ type: MY_CUSTOM_SHAPE_TYPE, x: 100, y: 100 })
+          }}
+        />
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+## ShapeUtil vs BaseBoxShapeUtil
+
+<Tabs>
+  <Tab title="ShapeUtil">
+    Use `ShapeUtil` when you need full control over your shape's behavior:
+
+    ```typescript
+    export class MyShapeUtil extends ShapeUtil<ICustomShape> {
+      // You must implement:
+      getGeometry(shape: ICustomShape): Geometry2d { ... }
+      onResize(shape: any, info: TLResizeInfo<any>) { ... }
+    }
+    ```
+
+    You'll need to define geometry and resize behavior manually.
+  </Tab>
+
+  <Tab title="BaseBoxShapeUtil">
+    Use `BaseBoxShapeUtil` for rectangular shapes to get default implementations:
+
+    ```typescript
+    export class MyShapeUtil extends BaseBoxShapeUtil<ICustomShape> {
+      // getGeometry and onResize are handled automatically
+      // Just focus on rendering and props
+    }
+    ```
+
+    This is simpler for basic box-shaped components.
+  </Tab>
+</Tabs>
+
+## Advanced features
+
+### Making shapes editable
+
+Shapes can enter an "editing" state when double-clicked:
+
+```typescript
+class EditableShapeUtil extends BaseBoxShapeUtil<IMyEditableShape> {
+  override canEdit() {
+    return true
+  }
+
+  override canEditWhileLocked() {
+    return true // Allow editing even when locked
+  }
+
+  component(shape: IMyEditableShape) {
+    const isEditing = this.editor.getEditingShapeId() === shape.id
+
+    return (
+      <HTMLContainer
+        onPointerDown={isEditing ? this.editor.markEventAsHandled : undefined}
+        style={{ pointerEvents: isEditing ? 'all' : 'none' }}
+      >
+        {isEditing ? (
+          <input value={shape.props.text} onChange={...} />
+        ) : (
+          <p>{shape.props.text}</p>
+        )}
+      </HTMLContainer>
+    )
+  }
+
+  override onEditEnd(shape: IMyEditableShape) {
+    // Called when editing ends
+  }
+}
+```
+
+### Interactive shapes
+
+For shapes with clickable elements:
+
+```typescript
+class CounterShapeUtil extends BaseBoxShapeUtil<CounterShape> {
+  override component(shape: CounterShape) {
+    const onClick = (event: MouseEvent, change: number) => {
+      event.stopPropagation()
+      this.editor.updateShape({
+        id: shape.id,
+        type: 'counter',
+        props: { count: shape.props.count + change },
+      })
+    }
+
+    return (
+      <HTMLContainer style={{ pointerEvents: 'all' }}>
+        <button onClick={(e) => onClick(e, -1)} onPointerDown={this.editor.markEventAsHandled}>-</button>
+        <span>{shape.props.count}</span>
+        <button onClick={(e) => onClick(e, 1)} onPointerDown={this.editor.markEventAsHandled}>+</button>
+      </HTMLContainer>
+    )
+  }
+}
+```
+
+<Warning>
+  When using interactive elements, always call `this.editor.markEventAsHandled` on `onPointerDown` to prevent the editor from treating clicks as shape selection.
+</Warning>
+
+### Custom resize behavior
+
+Control how shapes resize:
+
+```typescript
+import { resizeBox, TLResizeInfo } from 'tldraw'
+
+class MyShapeUtil extends ShapeUtil<ICustomShape> {
+  override canResize() {
+    return true
+  }
+
+  override isAspectRatioLocked() {
+    return false // Allow independent width/height changes
+  }
+
+  override onResize(shape: any, info: TLResizeInfo<any>) {
+    return resizeBox(shape, info)
+  }
+}
+```
+
+## Shape props validation
+
+tldraw uses validators to ensure shape data integrity:
+
+```typescript
+import { T } from 'tldraw'
+
+static override props: RecordProps<ICustomShape> = {
+  w: T.positiveNumber,           // Must be positive
+  h: T.positiveNumber,
+  color: T.string,
+  isActive: T.boolean,
+  items: T.arrayOf(T.string),
+  count: T.number.default(0),    // With default value
+}
+```
+
+Common validators:
+- `T.number` / `T.positiveNumber`
+- `T.string`
+- `T.boolean`
+- `T.arrayOf(validator)`
+- `T.object(shape)`
+
+## Geometry
+
+The `getGeometry` method defines hit-testing and bounds:
+
+<CodeGroup>
+```typescript Rectangle
+import { Rectangle2d } from 'tldraw'
+
+getGeometry(shape: ICustomShape): Geometry2d {
+  return new Rectangle2d({
+    width: shape.props.w,
+    height: shape.props.h,
+    isFilled: true,
+  })
+}
+```
+
+```typescript Circle
+import { Circle2d } from 'tldraw'
+
+getGeometry(shape: ICircleShape): Geometry2d {
+  return new Circle2d({
+    x: shape.props.w / 2,
+    y: shape.props.h / 2,
+    radius: shape.props.w / 2,
+    isFilled: true,
+  })
+}
+```
+
+```typescript Polygon
+import { Polygon2d } from 'tldraw'
+
+getGeometry(shape: IPolygonShape): Geometry2d {
+  return new Polygon2d({
+    points: shape.props.points,
+    isFilled: true,
+  })
+}
+```
+</CodeGroup>
+
+## Rendering
+
+### Component method
+
+The `component` method renders your shape:
+
+```tsx
+component(shape: ICustomShape) {
+  return (
+    <HTMLContainer id={shape.id} style={{ backgroundColor: '#efefef' }}>
+      <div>{shape.props.text}</div>
+    </HTMLContainer>
+  )
+}
+```
+
+### Indicator method
+
+The `indicator` shows the selection outline:
+
+```tsx
+indicator(shape: ICustomShape) {
+  return <rect width={shape.props.w} height={shape.props.h} />
+}
+```
+
+## Shape with a tool
+
+Create a tool for easy shape creation:
+
+```typescript
+import { BaseBoxShapeTool } from 'tldraw'
+
+export class CounterShapeTool extends BaseBoxShapeTool {
+  static override id = 'counter'
+  override shapeType = 'counter' as const
+}
+
+// Register both:
+const customShapeUtils = [CounterShapeUtil]
+const customTools = [CounterShapeTool]
+
+<Tldraw shapeUtils={customShapeUtils} tools={customTools} />
+```
+
+<Tip>
+  Use `BaseBoxShapeTool` for box-shaped tools. It handles the drag-to-create interaction automatically.
+</Tip>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use unique type names">
+    Prefix shape types with your app name to avoid collisions:
+    
+    ```typescript
+    const MY_SHAPE_TYPE = 'myapp:custom-shape'
+    ```
+  </Accordion>
+
+  <Accordion title="Keep shapes serializable">
+    Shape props must be JSON-serializable. Avoid functions, class instances, or circular references.
+  </Accordion>
+
+  <Accordion title="Optimize rendering">
+    The `component` method can re-render frequently. Keep it lightweight and use React hooks appropriately.
+  </Accordion>
+
+  <Accordion title="Handle edge cases">
+    Always validate props and handle cases like zero width/height gracefully.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom tools" icon="hand-pointer" href="/guides/custom-tools">
+    Learn to create tools for your custom shapes
+  </Card>
+  <Card title="Events and side effects" icon="bolt" href="/guides/events-and-side-effects">
+    React to shape changes with side effects
+  </Card>
+  <Card title="Multiplayer" icon="users" href="/guides/multiplayer">
+    Sync custom shapes across users
+  </Card>
+</CardGroup>

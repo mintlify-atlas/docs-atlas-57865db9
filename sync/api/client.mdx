@@ -1,0 +1,563 @@
+---
+title: Client API
+description: Client-side multiplayer API reference
+---
+
+# Client API
+
+Complete API reference for client-side multiplayer synchronization.
+
+## useSync
+
+React hook for creating a synchronized store with multiplayer support.
+
+```tsx
+import { useSync } from '@tldraw/sync'
+
+const store = useSync(options)
+```
+
+### Parameters
+
+<ParamField path="uri" type="string | () => string | Promise<string>" required>
+  WebSocket server URI for synchronization.
+  
+  Can be:
+  - Static string: `'wss://sync.example.com/room-123'`
+  - Sync function: `() => 'wss://sync.example.com/room-123'`
+  - Async function: `async () => { const token = await getToken(); return \`wss://...?token=${token}\` }`
+  
+  Reserved query parameters `sessionId` and `storeId` are automatically added.
+</ParamField>
+
+<ParamField path="assets" type="TLAssetStore" required>
+  Asset store implementation for file uploads and storage.
+  
+  Must implement:
+  - `upload(asset, file): Promise<{ src: string }>` - Upload file and return URL
+  - `resolve(asset, context): string | null` - Resolve asset URL for display
+  
+  ```tsx
+  assets: {
+    async upload(asset, file) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const { url } = await res.json()
+      return { src: url }
+    },
+    resolve(asset) {
+      return asset.props.src
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="userInfo" type="TLPresenceUserInfo | Signal<TLPresenceUserInfo>">
+  User information for presence system.
+  
+  ```tsx
+  userInfo: {
+    id: 'user-123',
+    name: 'Alice',
+    color: '#ff0000'
+  }
+  ```
+  
+  Can be a reactive signal for dynamic updates:
+  ```tsx
+  const user = atom('user', { id: 'user-123', name: 'Alice', color: '#ff0000' })
+  userInfo: user
+  ```
+</ParamField>
+
+<ParamField path="getUserPresence" type="(store: TLStore, user: TLPresenceUserInfo) => TLPresenceStateInfo | null">
+  Customize presence data broadcast to other clients.
+  
+  ```tsx
+  getUserPresence: (store, user) => {
+    const instance = store.get('instance:instance')
+    if (!instance) return null
+    
+    return {
+      userId: user.id,
+      userName: user.name,
+      cursor: instance.cursor,
+      selectedShapeIds: instance.selectedShapeIds,
+      currentTool: instance.currentToolId
+    }
+  }
+  ```
+  
+  Return `null` to hide presence from other users.
+</ParamField>
+
+<ParamField path="onCustomMessageReceived" type="(data: any) => void">
+  Handler for custom messages from other clients or server.
+  
+  ```tsx
+  onCustomMessageReceived: (data) => {
+    if (data.type === 'chat') {
+      console.log(`${data.user}: ${data.message}`)
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="schema" type="StoreSchema">
+  Custom schema for extended shapes and records. See [schema customization](/sync/customization#schema-customization).
+</ParamField>
+
+<ParamField path="shapeUtils" type="ShapeUtil[]">
+  Custom shape utilities to include in the schema.
+</ParamField>
+
+<ParamField path="bindingUtils" type="BindingUtil[]">
+  Custom binding utilities to include in the schema.
+</ParamField>
+
+### Return value
+
+`RemoteTLStoreWithStatus` - A reactive store wrapper with connection status.
+
+<ResponseField name="status" type="'loading' | 'synced-remote' | 'error'">
+  Current synchronization state:
+  - `loading` - Establishing connection and loading initial state
+  - `synced-remote` - Connected and actively synchronizing
+  - `error` - Connection failed or sync error occurred
+</ResponseField>
+
+<ResponseField name="store" type="TLStore">
+  The synchronized tldraw store (only present when `status === 'synced-remote'`).
+</ResponseField>
+
+<ResponseField name="connectionStatus" type="'online' | 'offline'">
+  Real-time connection status (only present when `status === 'synced-remote'`):
+  - `online` - Connected to server
+  - `offline` - Temporarily disconnected, will reconnect automatically
+</ResponseField>
+
+<ResponseField name="error" type="Error">
+  Error object with message (only present when `status === 'error'`).
+</ResponseField>
+
+### Example
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSync } from '@tldraw/sync'
+import 'tldraw/tldraw.css'
+
+function MyApp({ roomId }: { roomId: string }) {
+  const store = useSync({
+    uri: `wss://sync.example.com/room/${roomId}`,
+    assets: {
+      async upload(asset, file) {
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await fetch('/api/upload', { 
+          method: 'POST', 
+          body: formData 
+        })
+        const { url } = await res.json()
+        return { src: url }
+      },
+      resolve(asset) {
+        return asset.props.src
+      }
+    },
+    userInfo: {
+      id: 'user-123',
+      name: 'Alice',
+      color: '#ff0000'
+    },
+    getUserPresence: (store, user) => {
+      const instance = store.get('instance:instance')
+      if (!instance) return null
+      
+      return {
+        userId: user.id,
+        userName: user.name,
+        cursor: instance.cursor,
+        selectedShapeIds: instance.selectedShapeIds
+      }
+    },
+    onCustomMessageReceived: (data) => {
+      if (data.type === 'notification') {
+        alert(data.message)
+      }
+    }
+  })
+  
+  if (store.status === 'loading') {
+    return <div>Loading...</div>
+  }
+  
+  if (store.status === 'error') {
+    return <div>Error: {store.error.message}</div>
+  }
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+---
+
+## useSyncDemo
+
+Quick setup hook using tldraw's demo server. **For testing only.**
+
+```tsx
+import { useSyncDemo } from '@tldraw/sync'
+
+const store = useSyncDemo({ roomId: 'my-test-room' })
+```
+
+<Warning>
+  Data on demo server is deleted after 24 hours. Rooms are publicly accessible. Use your own server for production.
+</Warning>
+
+### Parameters
+
+<ParamField path="roomId" type="string" required>
+  Unique room identifier. Use a company/project prefix to avoid collisions.
+  
+  ```tsx
+  // Good - unique prefix
+  roomId: 'acme-design-review-2024'
+  
+  // Better - UUID for privacy
+  roomId: `acme-${nanoid()}`
+  
+  // Bad - too generic
+  roomId: 'room1'
+  ```
+</ParamField>
+
+<ParamField path="userInfo" type="TLPresenceUserInfo | Signal<TLPresenceUserInfo>">
+  User information for presence. Same as `useSync`.
+</ParamField>
+
+<ParamField path="getUserPresence" type="(store: TLStore, user: TLPresenceUserInfo) => TLPresenceStateInfo | null">
+  Customize presence data. Same as `useSync`.
+</ParamField>
+
+<ParamField path="host" type="string" internal>
+  Override demo server URL. Defaults to `https://demo.tldraw.xyz`.
+</ParamField>
+
+### Return value
+
+Same as `useSync` - `RemoteTLStoreWithStatus`.
+
+### Example
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+import 'tldraw/tldraw.css'
+
+function QuickDemo() {
+  const store = useSyncDemo({
+    roomId: 'my-company-test-room',
+    userInfo: {
+      id: 'user-' + Math.random(),
+      name: 'Test User',
+      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    }
+  })
+  
+  if (store.status === 'loading') {
+    return <div>Connecting...</div>
+  }
+  
+  if (store.status === 'error') {
+    return <div>Error: {store.error.message}</div>
+  }
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+---
+
+## TLSyncClient
+
+Low-level sync client for advanced use cases. Most apps should use `useSync` instead.
+
+```ts
+import { TLSyncClient } from '@tldraw/sync-core'
+
+const client = new TLSyncClient(config)
+```
+
+### Constructor parameters
+
+<ParamField path="store" type="TLStore" required>
+  The local tldraw store to synchronize.
+</ParamField>
+
+<ParamField path="socket" type="TLPersistentClientSocket" required>
+  WebSocket adapter implementing the persistent socket interface.
+  
+  ```ts
+  interface TLPersistentClientSocket {
+    connectionStatus: 'online' | 'offline' | 'error'
+    sendMessage(msg: TLSocketClientSentEvent): void
+    onReceiveMessage: (callback: (msg: TLSocketServerSentEvent) => void) => () => void
+    onStatusChange: (callback: (event: TLSocketStatusChangeEvent) => void) => () => void
+    restart(): void
+    close(): void
+  }
+  ```
+</ParamField>
+
+<ParamField path="presence" type="Signal<TLRecord | null>" required>
+  Reactive signal containing presence state to broadcast.
+</ParamField>
+
+<ParamField path="presenceMode" type="Signal<'solo' | 'full'>">
+  Control presence sharing mode:
+  - `solo` - No presence shared, sync at 1 FPS
+  - `full` - Full presence shared, sync at 30 FPS
+</ParamField>
+
+<ParamField path="onLoad" type="(client: TLSyncClient) => void" required>
+  Callback when initial synchronization completes.
+</ParamField>
+
+<ParamField path="onSyncError" type="(reason: string) => void" required>
+  Callback when synchronization fails with error reason.
+</ParamField>
+
+<ParamField path="onCustomMessageReceived" type="(data: any) => void">
+  Handler for custom messages.
+</ParamField>
+
+<ParamField path="onAfterConnect" type="(client: TLSyncClient, details: { isReadonly: boolean }) => void">
+  Callback after successful connection with connection details.
+</ParamField>
+
+### Methods
+
+<ResponseField name="close" type="() => void">
+  Close the sync client and clean up resources. Cannot be reused after closing.
+  
+  ```ts
+  client.close()
+  ```
+</ResponseField>
+
+### Example
+
+```ts
+import { TLSyncClient, ClientWebSocketAdapter } from '@tldraw/sync-core'
+import { createTLStore, atom } from 'tldraw'
+
+const store = createTLStore({ schema: mySchema })
+const socket = new ClientWebSocketAdapter(
+  () => 'wss://sync.example.com/room'
+)
+
+const presence = atom('presence', null)
+
+const client = new TLSyncClient({
+  store,
+  socket,
+  presence,
+  onLoad: (client) => {
+    console.log('Loaded and synced')
+  },
+  onSyncError: (reason) => {
+    console.error('Sync error:', reason)
+  },
+  onAfterConnect: (client, { isReadonly }) => {
+    console.log('Connected, readonly:', isReadonly)
+  }
+})
+
+// Clean up
+client.close()
+```
+
+---
+
+## ClientWebSocketAdapter
+
+Built-in WebSocket adapter with automatic reconnection.
+
+```ts
+import { ClientWebSocketAdapter } from '@tldraw/sync-core'
+
+const adapter = new ClientWebSocketAdapter(getUri)
+```
+
+### Constructor parameters
+
+<ParamField path="getUri" type="() => string | Promise<string>" required>
+  Function that returns WebSocket URI. Called on each connection attempt.
+  
+  ```ts
+  new ClientWebSocketAdapter(async () => {
+    const token = await getAuthToken()
+    return `wss://sync.example.com/room?token=${token}`
+  })
+  ```
+</ParamField>
+
+### Properties
+
+<ResponseField name="connectionStatus" type="'online' | 'offline' | 'error'">
+  Current connection state.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="sendMessage" type="(msg: TLSocketClientSentEvent) => void">
+  Send message to server.
+</ResponseField>
+
+<ResponseField name="onReceiveMessage" type="(callback: (msg: TLSocketServerSentEvent) => void) => () => void">
+  Subscribe to messages from server. Returns unsubscribe function.
+</ResponseField>
+
+<ResponseField name="onStatusChange" type="(callback: (event: TLSocketStatusChangeEvent) => void) => () => void">
+  Subscribe to connection status changes. Returns unsubscribe function.
+</ResponseField>
+
+<ResponseField name="restart" type="() => void">
+  Force connection restart (disconnect then reconnect).
+</ResponseField>
+
+<ResponseField name="close" type="() => void">
+  Close connection permanently.
+</ResponseField>
+
+---
+
+## Types
+
+### RemoteTLStoreWithStatus
+
+Store wrapper returned by `useSync` and `useSyncDemo`.
+
+```ts
+type RemoteTLStoreWithStatus =
+  | { status: 'loading' }
+  | { 
+      status: 'synced-remote'
+      store: TLStore
+      connectionStatus: 'online' | 'offline'
+    }
+  | {
+      status: 'error'
+      error: Error
+    }
+```
+
+### TLPresenceUserInfo
+
+User information for presence system.
+
+```ts
+interface TLPresenceUserInfo {
+  id: string
+  name?: string
+  color?: string
+  // ... other custom fields
+}
+```
+
+### TLPresenceStateInfo
+
+Presence state to broadcast.
+
+```ts
+interface TLPresenceStateInfo {
+  userId: string
+  userName?: string
+  cursor: { x: number; y: number } | null
+  selectedShapeIds: string[]
+  // ... other custom fields
+}
+```
+
+### TLAssetStore
+
+Asset storage interface.
+
+```ts
+interface TLAssetStore {
+  upload(
+    asset: TLAsset, 
+    file: File
+  ): Promise<{ src: string }>
+  
+  resolve(
+    asset: TLAsset,
+    context: {
+      networkEffectiveType?: string
+      shouldResolveToOriginal: boolean
+      steppedScreenScale: number
+      dpr: number
+    }
+  ): string | null
+}
+```
+
+---
+
+## Error codes
+
+Sync errors with specific close event reasons:
+
+```ts
+import { TLSyncErrorCloseEventReason } from '@tldraw/sync-core'
+
+TLSyncErrorCloseEventReason.NOT_FOUND         // Room not found
+TLSyncErrorCloseEventReason.FORBIDDEN         // Access denied
+TLSyncErrorCloseEventReason.NOT_AUTHENTICATED // Auth required
+TLSyncErrorCloseEventReason.CLIENT_TOO_OLD    // Client version too old
+TLSyncErrorCloseEventReason.SERVER_TOO_OLD    // Server version too old
+TLSyncErrorCloseEventReason.INVALID_RECORD    // Invalid data sent
+TLSyncErrorCloseEventReason.RATE_LIMITED      // Too many requests
+TLSyncErrorCloseEventReason.ROOM_FULL         // Room at capacity
+```
+
+Handle in error state:
+
+```tsx
+if (store.status === 'error') {
+  const msg = store.error.message
+  
+  if (msg.includes('NOT_FOUND')) {
+    return <div>Room not found</div>
+  }
+  if (msg.includes('CLIENT_TOO_OLD')) {
+    return <div>Please refresh to update</div>
+  }
+  // ... handle other errors
+}
+```
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Server API" icon="server" href="/sync/api/server">
+    Server-side API reference
+  </Card>
+  
+  <Card title="Store sync" icon="database" href="/sync/api/store-sync">
+    Store synchronization API
+  </Card>
+  
+  <Card title="Setup guide" icon="wrench" href="/sync/setup">
+    Production setup guide
+  </Card>
+  
+  <Card title="Customization" icon="palette" href="/sync/customization">
+    Customize sync behavior
+  </Card>
+</CardGroup>

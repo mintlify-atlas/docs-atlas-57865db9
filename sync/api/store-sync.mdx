@@ -1,0 +1,492 @@
+---
+title: Store sync API
+description: Storage and synchronization primitives API reference
+---
+
+# Store sync API
+
+Low-level storage and synchronization API reference for custom implementations.
+
+## TLSyncStorage
+
+Interface for implementing custom storage backends.
+
+```ts
+import { TLSyncStorage } from '@tldraw/sync-core'
+
+class MyCustomStorage implements TLSyncStorage<TLRecord> {
+  async transaction<T>(fn: TransactionCallback<T>) {
+    // Implementation
+  }
+  
+  onChange(callback: () => void) {
+    // Implementation
+    return () => { /* cleanup */ }
+  }
+}
+```
+
+### Methods
+
+<ResponseField name="transaction" type="<T>(fn: TLSyncStorageTransactionCallback<R, T>, options?: TLSyncStorageTransactionOptions) => TransactionResult<T>">
+  Execute operations within a transaction.
+  
+  ```ts
+  const { result, clock, documentClock, changes } = storage.transaction((txn) => {
+    const record = txn.get('shape:123')
+    txn.set('shape:123', { ...record, x: 100 })
+    return { success: true }
+  })
+  ```
+  
+  **Parameters:**
+  - `fn` - Transaction callback receiving transaction object
+  - `options` - Optional transaction configuration
+    - `id` - Transaction identifier for change tracking
+    - `emitChanges` - When to emit changes: `'always'`, `'never'`, or `'when-different'`
+  
+  **Returns:**
+  - `result` - Return value from callback
+  - `clock` - Current logical clock
+  - `documentClock` - Document-specific clock
+  - `changes` - Changes made (if any)
+</ResponseField>
+
+<ResponseField name="onChange" type="(callback: (props: TLSyncStorageOnChangeCallbackProps) => void) => () => void">
+  Subscribe to external storage changes. Returns cleanup function.
+  
+  ```ts
+  const unsubscribe = storage.onChange(({ id }) => {
+    if (id !== myTransactionId) {
+      console.log('External change detected')
+    }
+  })
+  ```
+  
+  **Callback receives:**
+  - `id` - Transaction ID that caused the change
+</ResponseField>
+
+---
+
+## TLSyncStorageTransaction
+
+Transaction interface provided to transaction callbacks.
+
+### Methods
+
+<ResponseField name="get" type="(id: string) => R | undefined">
+  Get record by ID.
+  
+  ```ts
+  const shape = txn.get('shape:123')
+  ```
+</ResponseField>
+
+<ResponseField name="set" type="(id: string, record: R) => void">
+  Store or update record. Automatically clears tombstones.
+  
+  ```ts
+  txn.set('shape:123', { 
+    id: 'shape:123',
+    typeName: 'shape',
+    type: 'geo',
+    x: 100,
+    y: 100
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="delete" type="(id: string) => void">
+  Delete record and create tombstone.
+  
+  ```ts
+  txn.delete('shape:123')
+  ```
+</ResponseField>
+
+<ResponseField name="getClock" type="() => number">
+  Get current logical clock value.
+  
+  ```ts
+  const clock = txn.getClock()
+  ```
+</ResponseField>
+
+<ResponseField name="getChangesSince" type="(since: number) => TLSyncStorageGetChangesSinceResult<R> | null">
+  Get changes since a specific clock value.
+  
+  ```ts
+  const changes = txn.getChangesSince(lastKnownClock)
+  if (changes) {
+    if (changes.wipeAll) {
+      // Full state reload required
+    } else {
+      // Apply incremental diff
+      applyDiff(changes.diff)
+    }
+  }
+  ```
+  
+  **Returns:**
+  - `null` - No changes available (clock too old)
+  - `{ wipeAll: true }` - Full reload required
+  - `{ wipeAll: false, diff: TLSyncForwardDiff }` - Incremental changes
+</ResponseField>
+
+---
+
+## Storage implementations
+
+### InMemorySyncStorage
+
+In-memory storage for development and testing.
+
+```ts
+import { InMemorySyncStorage, DEFAULT_INITIAL_SNAPSHOT } from '@tldraw/sync-core'
+
+const storage = new InMemorySyncStorage()
+
+// Or with initial data
+const storage = new InMemorySyncStorage({
+  snapshot: myInitialSnapshot
+})
+```
+
+<Warning>
+  Data is lost when process exits. Not suitable for production.
+</Warning>
+
+### SQLiteSyncStorage
+
+Persistent SQLite-based storage.
+
+```ts
+import { SQLiteSyncStorage, NodeSqliteWrapper } from '@tldraw/sync-core'
+import Database from 'better-sqlite3'
+
+const db = new Database('./room.db')
+const sql = new NodeSqliteWrapper(db)
+const storage = new SQLiteSyncStorage({ sql })
+```
+
+**Constructor options:**
+- `sql` (TLSyncSqliteWrapper, required) - SQLite wrapper
+- `snapshot` (RoomSnapshot, optional) - Initial snapshot if database is empty
+
+**Static methods:**
+
+<ResponseField name="hasBeenInitialized" type="(sql: TLSyncSqliteWrapper) => boolean">
+  Check if database has been initialized.
+  
+  ```ts
+  if (SQLiteSyncStorage.hasBeenInitialized(sql)) {
+    // Database ready
+  } else {
+    // Need to initialize
+  }
+  ```
+</ResponseField>
+
+---
+
+## Custom storage example
+
+```ts
+import { TLSyncStorage, TLSyncStorageTransaction } from '@tldraw/sync-core'
+import { TLRecord } from '@tldraw/tlschema'
+import postgres from 'postgres'
+
+class PostgresStorage implements TLSyncStorage<TLRecord> {
+  private sql: postgres.Sql
+  private roomId: string
+  
+  constructor(sql: postgres.Sql, roomId: string) {
+    this.sql = sql
+    this.roomId = roomId
+  }
+  
+  async transaction<T>(
+    fn: (txn: TLSyncStorageTransaction<TLRecord>) => T,
+    options?: { id?: string; emitChanges?: 'always' | 'never' | 'when-different' }
+  ) {
+    return await this.sql.begin(async (sql) => {
+      // Get current clock
+      const [{ clock, document_clock }] = await sql`
+        SELECT clock, document_clock 
+        FROM rooms 
+        WHERE id = ${this.roomId}
+      `
+      
+      let newClock = clock
+      const changes: any = { puts: {}, deletes: [] }
+      
+      // Create transaction object
+      const txn: TLSyncStorageTransaction<TLRecord> = {
+        get: async (id: string) => {
+          const [record] = await sql`
+            SELECT data 
+            FROM records 
+            WHERE room_id = ${this.roomId} AND record_id = ${id}
+          `
+          return record ? JSON.parse(record.data) : undefined
+        },
+        
+        set: async (id: string, record: TLRecord) => {
+          newClock++
+          await sql`
+            INSERT INTO records (room_id, record_id, data, clock)
+            VALUES (${this.roomId}, ${id}, ${JSON.stringify(record)}, ${newClock})
+            ON CONFLICT (room_id, record_id) 
+            DO UPDATE SET data = ${JSON.stringify(record)}, clock = ${newClock}
+          `
+          changes.puts[id] = record
+        },
+        
+        delete: async (id: string) => {
+          newClock++
+          await sql`
+            DELETE FROM records 
+            WHERE room_id = ${this.roomId} AND record_id = ${id}
+          `
+          await sql`
+            INSERT INTO tombstones (room_id, record_id, clock)
+            VALUES (${this.roomId}, ${id}, ${newClock})
+          `
+          changes.deletes.push(id)
+        },
+        
+        getClock: () => newClock,
+        
+        getChangesSince: async (since: number) => {
+          // Query changes since clock value
+          const records = await sql`
+            SELECT record_id, data 
+            FROM records 
+            WHERE room_id = ${this.roomId} AND clock > ${since}
+          `
+          
+          const tombstones = await sql`
+            SELECT record_id 
+            FROM tombstones 
+            WHERE room_id = ${this.roomId} AND clock > ${since}
+          `
+          
+          if (records.length === 0 && tombstones.length === 0) {
+            return null
+          }
+          
+          return {
+            wipeAll: false,
+            diff: {
+              puts: Object.fromEntries(
+                records.map((r) => [r.record_id, JSON.parse(r.data)])
+              ),
+              deletes: tombstones.map((t) => t.record_id)
+            }
+          }
+        }
+      }
+      
+      // Execute callback
+      const result = fn(txn)
+      
+      // Update room clock
+      await sql`
+        UPDATE rooms 
+        SET clock = ${newClock}, document_clock = ${newClock}
+        WHERE id = ${this.roomId}
+      `
+      
+      return {
+        result,
+        clock: newClock,
+        documentClock: newClock,
+        changes: Object.keys(changes.puts).length > 0 || changes.deletes.length > 0
+          ? changes
+          : null
+      }
+    })
+  }
+  
+  onChange(callback: (props: { id?: string }) => void) {
+    // Subscribe to PostgreSQL NOTIFY for external changes
+    const channel = `room_changes_${this.roomId}`
+    
+    this.sql.listen(channel, (payload) => {
+      callback({ id: payload })
+    })
+    
+    return () => {
+      this.sql.unlisten(channel)
+    }
+  }
+}
+
+// Usage
+const sql = postgres(process.env.DATABASE_URL!)
+const storage = new PostgresStorage(sql, 'room-123')
+
+const room = new TLSocketRoom({
+  schema: createTLSchema(),
+  storage
+})
+```
+
+---
+
+## Utility functions
+
+### loadSnapshotIntoStorage
+
+Load a snapshot into storage.
+
+```ts
+import { loadSnapshotIntoStorage } from '@tldraw/sync-core'
+
+const snapshot: RoomSnapshot = {
+  clock: 100,
+  documentClock: 95,
+  documents: [
+    {
+      state: { id: 'shape:1', type: 'geo', x: 0, y: 0 },
+      lastChangedClock: 10
+    }
+  ],
+  tombstones: { 'shape:2': 50 }
+}
+
+storage.transaction((txn) => {
+  loadSnapshotIntoStorage(txn, snapshot)
+})
+```
+
+---
+
+## Types
+
+### TLSyncForwardDiff
+
+Forward-only diff format with full records.
+
+```ts
+interface TLSyncForwardDiff<R extends UnknownRecord> {
+  puts: Record<string, R | [R, R]>  // id -> record or [before, after]
+  deletes: string[]                  // Array of deleted IDs
+}
+```
+
+### NetworkDiff
+
+Compact diff format for network transmission.
+
+```ts
+type NetworkDiff<R> = Record<string, RecordOp<R>>
+
+type RecordOp<R> =
+  | [RecordOpType.Put, R]           // Full record
+  | [RecordOpType.Patch, ObjectDiff] // Incremental patch
+  | [RecordOpType.Remove]            // Deletion
+```
+
+### ObjectDiff
+
+Field-level diff operations.
+
+```ts
+type ObjectDiff = Record<string, ValueOp>
+
+type ValueOp =
+  | [ValueOpType.Put, any]        // Set value
+  | [ValueOpType.Patch, ObjectDiff] // Nested patch
+  | [ValueOpType.Append, any[]]    // Append to array
+  | [ValueOpType.Delete]           // Remove field
+```
+
+---
+
+## Diff operations
+
+### diffRecord
+
+Compute diff between two records.
+
+```ts
+import { diffRecord } from '@tldraw/sync-core'
+
+const before = { id: 'shape:1', type: 'geo', x: 0, y: 0, w: 100, h: 100 }
+const after = { id: 'shape:1', type: 'geo', x: 50, y: 0, w: 100, h: 100 }
+
+const diff = diffRecord(before, after)
+// { x: [ValueOpType.Put, 50] }
+```
+
+### applyObjectDiff
+
+Apply object diff to a record.
+
+```ts
+import { applyObjectDiff, ValueOpType } from '@tldraw/sync-core'
+
+const record = { id: 'shape:1', type: 'geo', x: 0, y: 0 }
+const diff = { x: [ValueOpType.Put, 50], z: [ValueOpType.Put, 10] }
+
+const updated = applyObjectDiff(record, diff)
+// { id: 'shape:1', type: 'geo', x: 50, y: 0, z: 10 }
+```
+
+### getNetworkDiff
+
+Convert RecordsDiff to NetworkDiff.
+
+```ts
+import { getNetworkDiff } from '@tldraw/sync-core'
+
+const recordsDiff = {
+  added: { 'shape:1': newShape },
+  updated: { 'shape:2': [oldShape, newShape] },
+  removed: { 'shape:3': deletedShape }
+}
+
+const networkDiff = getNetworkDiff(recordsDiff)
+```
+
+---
+
+## Schema migrations
+
+Storage automatically handles schema migrations:
+
+```ts
+import { createTLSchema } from '@tldraw/tlschema'
+
+const schema = createTLSchema()
+
+// Migrate storage on room creation
+storage.transaction((txn) => {
+  schema.migrateStorage(txn)
+})
+```
+
+Migrations run automatically when:
+- Creating a new room
+- Client connects with different schema version
+- Server upgrades to new schema
+
+---
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Client API" icon="code" href="/sync/api/client">
+    Client-side API reference
+  </Card>
+  
+  <Card title="Server API" icon="server" href="/sync/api/server">
+    Server-side API reference
+  </Card>
+  
+  <Card title="Setup guide" icon="wrench" href="/sync/setup">
+    Production setup guide
+  </Card>
+</CardGroup>

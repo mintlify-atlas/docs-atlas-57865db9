@@ -1,0 +1,250 @@
+---
+title: Custom UI
+description: Build your own user interface for the tldraw editor
+---
+
+You can replace tldraw's default UI with your own custom interface while keeping the core editor functionality.
+
+## Hide default UI
+
+Use the `hideUi` prop to hide the default toolbar, style menu, and pages menu:
+
+```tsx CustomUiExample.tsx
+import { useEffect } from 'react'
+import { Tldraw, track, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
+import './custom-ui.css'
+
+export default function CustomUiExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw hideUi>
+        <CustomUi />
+      </Tldraw>
+    </div>
+  )
+}
+
+// Custom UI component
+const CustomUi = track(() => {
+  const editor = useEditor()
+
+  useEffect(() => {
+    const handleKeyUp = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'Delete':
+        case 'Backspace': {
+          editor.deleteShapes(editor.getSelectedShapeIds())
+          break
+        }
+        case 'v': {
+          editor.setCurrentTool('select')
+          break
+        }
+        case 'e': {
+          editor.setCurrentTool('eraser')
+          break
+        }
+        case 'x':
+        case 'p':
+        case 'b':
+        case 'd': {
+          editor.setCurrentTool('draw')
+          break
+        }
+      }
+    }
+
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  })
+
+  return (
+    <div className="custom-layout">
+      <div className="custom-toolbar">
+        <button
+          className="custom-button"
+          data-isactive={editor.getCurrentToolId() === 'select'}
+          onClick={() => editor.setCurrentTool('select')}
+        >
+          Select
+        </button>
+        <button
+          className="custom-button"
+          data-isactive={editor.getCurrentToolId() === 'draw'}
+          onClick={() => editor.setCurrentTool('draw')}
+        >
+          Pencil
+        </button>
+        <button
+          className="custom-button"
+          data-isactive={editor.getCurrentToolId() === 'eraser'}
+          onClick={() => editor.setCurrentTool('eraser')}
+        >
+          Eraser
+        </button>
+      </div>
+    </div>
+  )
+})
+```
+
+## Using track for reactivity
+
+Wrap your custom UI component with `track` to make it reactive to editor state changes:
+
+```tsx
+import { track, useEditor } from 'tldraw'
+
+const CustomToolbar = track(() => {
+  const editor = useEditor()
+  const currentTool = editor.getCurrentToolId()
+  const selectedShapes = editor.getSelectedShapeIds()
+
+  // Component re-renders when tracked values change
+  return (
+    <div>
+      <p>Current tool: {currentTool}</p>
+      <p>Selected: {selectedShapes.length} shapes</p>
+    </div>
+  )
+})
+```
+
+<Note>
+The `track` function makes your component reactive - it will re-render when the signals it accesses change. This is powered by tldraw's reactive state system.
+</Note>
+
+## Access editor with useEditor
+
+The `useEditor` hook provides access to the editor instance inside Tldraw's children:
+
+```tsx
+import { useEditor } from 'tldraw'
+
+function MyCustomComponent() {
+  const editor = useEditor()
+
+  return (
+    <button onClick={() => editor.deleteShapes(editor.getSelectedShapeIds())}>
+      Delete Selected
+    </button>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw hideUi>
+        <MyCustomComponent />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Custom toolbar example
+
+```tsx
+import { Tldraw, useEditor, track } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const CustomToolbar = track(() => {
+  const editor = useEditor()
+  const tools = [
+    { id: 'select', label: 'Select', icon: '↖' },
+    { id: 'draw', label: 'Draw', icon: '✏️' },
+    { id: 'eraser', label: 'Eraser', icon: '🧹' },
+    { id: 'hand', label: 'Hand', icon: '✋' },
+  ]
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: 10,
+      left: 10,
+      display: 'flex',
+      gap: 8,
+      padding: 8,
+      background: 'white',
+      borderRadius: 8,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    }}>
+      {tools.map(tool => (
+        <button
+          key={tool.id}
+          onClick={() => editor.setCurrentTool(tool.id)}
+          style={{
+            padding: '8px 12px',
+            border: editor.getCurrentToolId() === tool.id 
+              ? '2px solid blue' 
+              : '1px solid #ccc',
+            borderRadius: 4,
+            background: editor.getCurrentToolId() === tool.id 
+              ? '#e3f2fd' 
+              : 'white',
+            cursor: 'pointer',
+          }}
+        >
+          {tool.icon} {tool.label}
+        </button>
+      ))}
+    </div>
+  )
+})
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw hideUi>
+        <CustomToolbar />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Keyboard shortcuts
+
+Add custom keyboard shortcuts in a `useEffect`:
+
+```tsx
+const CustomUi = () => {
+  const editor = useEditor()
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 'z':
+            editor.undo()
+            break
+          case 'y':
+            editor.redo()
+            break
+          case 'a':
+            editor.selectAll()
+            break
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [editor])
+
+  return <div>Custom UI</div>
+}
+```
+
+## Note about context menu
+
+The `hideUi` prop doesn't hide the context menu. To completely customize the UI including the context menu, you'll need to render the editor components separately. See the exploded example in the tldraw repository.
+
+## Related
+
+- [Custom components](/examples/custom-components) - Customize canvas components
+- [Controlled editor](/examples/controlled-editor) - Control editor programmatically
+- [UI customization guide](/guides/ui-customization)

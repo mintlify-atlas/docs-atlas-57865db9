@@ -1,0 +1,207 @@
+---
+title: ArrowShapeUtil
+description: Shape utility for arrow shapes that can bind to other shapes
+---
+
+`ArrowShapeUtil` handles arrow shapes which can connect to and bind to other shapes, support different arrow styles (straight, arc, elbow), and include optional text labels.
+
+## Type signature
+
+```typescript
+class ArrowShapeUtil extends ShapeUtil<TLArrowShape>
+```
+
+## Features
+
+- Three arrow kinds: `arc`, `straight`, and `elbow`
+- Configurable start and end arrowheads
+- Bindings to other shapes with precise/imprecise modes
+- Rich text labels with positioning
+- Customizable colors, sizes, and dash styles
+- Fill support for certain arrowhead types
+
+## Configuration options
+
+```typescript
+interface ArrowShapeOptions {
+  expandElbowLegLength: { s: 28, m: 36, l: 44, xl: 66 }
+  minElbowLegLength: { s: number, m: number, l: number, xl: number }
+  minElbowHandleDistance: 16
+  arcArrowCenterSnapDistance: 16
+  elbowArrowCenterSnapDistance: 24
+  elbowArrowEdgeSnapDistance: 20
+  elbowArrowPointSnapDistance: 24
+  elbowArrowAxisSnapDistance: 16
+  labelCenterSnapDistance: 10
+  elbowMidpointSnapDistance: 10
+  elbowMinSegmentLengthToShowMidpointHandle: 20
+  hoverPreciseTimeout: 600
+  pointingPreciseTimeout: 320
+  shouldBeExact(editor: Editor): boolean
+  shouldIgnoreTargets(editor: Editor): boolean
+  showTextOutline: true
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLArrowShape['props'] {
+  return {
+    kind: 'arc',
+    elbowMidPoint: 0.5,
+    dash: 'draw',
+    size: 'm',
+    fill: 'none',
+    color: 'black',
+    labelColor: 'black',
+    bend: 0,
+    start: { x: 0, y: 0 },
+    end: { x: 2, y: 0 },
+    arrowheadStart: 'none',
+    arrowheadEnd: 'arrow',
+    richText: toRichText(''),
+    labelPosition: 0.5,
+    font: 'draw',
+    scale: 1,
+  }
+}
+```
+
+## Properties
+
+<ParamField path="kind" type="'arc' | 'elbow'" default="'arc'">
+  The type of arrow path to render.
+</ParamField>
+
+<ParamField path="start" type="VecModel" required>
+  The start point of the arrow in local shape space.
+</ParamField>
+
+<ParamField path="end" type="VecModel" required>
+  The end point of the arrow in local shape space.
+</ParamField>
+
+<ParamField path="bend" type="number" default="0">
+  The bend amount for arc arrows. Positive values bend clockwise.
+</ParamField>
+
+<ParamField path="arrowheadStart" type="TLArrowheadType" default="'none'">
+  The arrowhead style at the start: `'none'`, `'arrow'`, `'bar'`, `'dot'`, `'diamond'`, `'inverted'`, `'pipe'`, `'square'`, `'triangle'`
+</ParamField>
+
+<ParamField path="arrowheadEnd" type="TLArrowheadType" default="'arrow'">
+  The arrowhead style at the end.
+</ParamField>
+
+<ParamField path="richText" type="TLRichText">
+  Rich text content for the arrow label.
+</ParamField>
+
+<ParamField path="labelPosition" type="number" default="0.5">
+  Position of the label along the arrow (0 to 1).
+</ParamField>
+
+## Handles
+
+Arrows have 2-3 handles depending on the arrow kind:
+
+### Arc/Straight arrows
+- `start` - The start point (vertex handle)
+- `end` - The end point (vertex handle)  
+- `middle` - Bend control (virtual handle, arc only)
+
+### Elbow arrows
+- `start` - The start point (vertex handle)
+- `end` - The end point (vertex handle)
+- `middle` - Midpoint adjustment (vertex handle, conditional)
+
+## Bindings
+
+Arrows support bindings to other shapes via the `@tldraw/arrow-binding` system.
+
+### canBind()
+
+```typescript
+canBind({ toShape }: TLShapeUtilCanBindOpts): boolean {
+  return toShape.type !== 'arrow'
+}
+```
+
+Arrows can bind TO shapes, but not FROM shapes (shapes can't bind to arrows).
+
+### Binding modes
+
+- **Imprecise** - Arrow points generally at the shape
+- **Precise** - Arrow points to a specific anchor point
+- **Exact** - Arrow points to an exact position (hold Alt)
+
+## Methods
+
+### getGeometry()
+
+Returns a `Group2d` containing:
+- The arrow body (Edge2d, Arc2d, or Polyline2d)
+- Optional label geometry (Rectangle2d)
+
+### getHandles()
+
+Returns start, end, and optionally middle handles based on arrow kind and geometry.
+
+### onHandleDrag()
+
+Handles dragging of arrow endpoints and midpoint:
+- Updates bindings when dragging endpoints
+- Adjusts bend for arc arrows
+- Adjusts elbow midpoint position
+
+### onTranslateStart()
+
+Handles arrow translation with special logic for:
+- Maintaining bindings when translating with bound shapes
+- Removing bindings for solo elbow arrow translation
+
+### onResize()
+
+Handles arrow resizing:
+- Scales unbound endpoints
+- Updates bound anchor positions
+- Maintains bend proportionally
+
+### onDoubleClickHandle()
+
+Toggles arrowhead on/off when double-clicking start or end handles.
+
+## Indicator
+
+Uses canvas-based indicator rendering for better performance:
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLArrowShape): TLIndicatorPath | undefined {
+  // Returns Path2D with optional clip path for labels
+}
+```
+
+## Example: Custom arrow options
+
+```typescript
+import { ArrowShapeUtil } from 'tldraw'
+
+const CustomArrowUtil = ArrowShapeUtil.configure({
+  showTextOutline: false,
+  shouldBeExact: (editor) => editor.inputs.getShiftKey(),
+  shouldIgnoreTargets: (editor) => editor.inputs.getAltKey(),
+})
+```
+
+## Example: Getting arrow length
+
+```typescript
+import { getArrowLength } from 'tldraw'
+
+const length = getArrowLength(editor, arrowShape)
+```

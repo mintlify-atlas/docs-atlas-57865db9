@@ -1,0 +1,537 @@
+---
+title: Performance optimization
+description: Techniques and best practices for optimizing tldraw applications
+---
+
+The tldraw SDK is built for performance, but understanding how to optimize your implementation can make a significant difference in complex applications. This guide covers key optimization techniques and best practices.
+
+## Understanding performance
+
+### Automatic optimizations
+
+The editor includes several built-in optimizations that work automatically:
+
+- **Viewport culling:** Shapes outside the viewport aren't rendered
+- **Lazy evaluation:** Computed signals only recalculate when needed
+- **Batched updates:** Multiple changes trigger single re-renders
+- **Spatial indexing:** Fast lookups for shapes by position
+- **Incremental computation:** Efficient diff-based updates
+
+<Tip>
+In most cases, the default optimizations are sufficient. Focus on measurement before optimization.
+</Tip>
+
+### Measuring performance
+
+Use the browser's performance tools and React DevTools Profiler:
+
+```typescript
+import { Editor } from '@tldraw/editor'
+
+const editor = new Editor(options)
+
+// Access performance tracker
+const tracker = editor.performanceTracker
+
+// Monitor render times
+tracker.sample('render', () => {
+  // Your rendering code
+})
+```
+
+## Viewport culling
+
+Shapes outside the viewport are automatically culled from rendering. You can control this behavior for custom shapes:
+
+### Default culling
+
+```typescript
+import { ShapeUtil, Rectangle2d } from '@tldraw/editor'
+
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  getGeometry(shape: MyShape) {
+    return new Rectangle2d({
+      width: shape.props.w,
+      height: shape.props.h,
+      isFilled: true,
+    })
+  }
+  
+  // Default: shapes are culled when outside viewport
+  component(shape: MyShape) {
+    return <div style={{ width: shape.props.w, height: shape.props.h }} />
+  }
+}
+```
+
+### Conditional culling
+
+Disable culling for shapes with visual effects that extend beyond bounds:
+
+```typescript
+class GlowShapeUtil extends ShapeUtil<GlowShape> {
+  // Prevent culling for shapes with glow/shadow effects
+  override canCull(shape: GlowShape) {
+    return !shape.props.hasGlow
+  }
+  
+  component(shape: GlowShape) {
+    const style = shape.props.hasGlow
+      ? { filter: 'drop-shadow(0 0 20px rgba(0,0,255,0.5))' }
+      : {}
+    
+    return <div style={style}>...</div>
+  }
+}
+```
+
+<Warning>
+Shapes with `canCull() === false` are always rendered, even when off-screen. Use this sparingly to avoid performance issues.
+</Warning>
+
+## Optimizing computed signals
+
+### Minimize dependencies
+
+Only access the data you need in computed signals:
+
+```typescript
+import { computed } from '@tldraw/state'
+
+// ❌ Bad: depends on entire shape when only position matters
+const isInBounds = computed('isInBounds', () => {
+  const shape = editor.getShape(shapeId)
+  return bounds.contains(shape.x, shape.y)
+})
+
+// ✅ Good: only depends on position
+const isInBounds = computed('isInBounds', () => {
+  const shape = editor.getShape(shapeId)
+  const { x, y } = shape
+  return bounds.contains(x, y)
+})
+```
+
+### Use custom equality
+
+Avoid recomputations when values are semantically equal:
+
+```typescript
+const bounds = computed(
+  'selectionBounds',
+  () => {
+    const shapes = editor.getSelectedShapes()
+    return calculateBounds(shapes)
+  },
+  {
+    isEqual: (a, b) => {
+      // Treat bounds as equal if within 1px
+      return (
+        Math.abs(a.x - b.x) < 1 &&
+        Math.abs(a.y - b.y) < 1 &&
+        Math.abs(a.w - b.w) < 1 &&
+        Math.abs(a.h - b.h) < 1
+      )
+    },
+  }
+)
+```
+
+### Incremental computation
+
+Use previous values and diffs for expensive computations:
+
+```typescript
+import { computed, isUninitialized } from '@tldraw/state'
+
+const totalArea = computed('totalArea', (prevValue, lastEpoch) => {
+  const shapes = editor.getCurrentPageShapes()
+  
+  if (isUninitialized(prevValue)) {
+    // Initial computation
+    return shapes.reduce((sum, s) => sum + s.props.w * s.props.h, 0)
+  }
+  
+  // Incremental update based on shape changes
+  const diff = editor.store.getDiffSince(lastEpoch)
+  let area = prevValue
+  
+  for (const change of diff) {
+    if (change.type === 'add') {
+      area += change.shape.props.w * change.shape.props.h
+    } else if (change.type === 'remove') {
+      area -= change.shape.props.w * change.shape.props.h
+    } else {
+      // Handle updates...
+    }
+  }
+  
+  return area
+})
+```
+
+## React component optimization
+
+### Use track() for automatic subscriptions
+
+```typescript
+import { track, useEditor } from '@tldraw/editor'
+
+// Automatically subscribes to accessed signals
+const MyComponent = track(function MyComponent() {
+  const editor = useEditor()
+  const selectedShapes = editor.getSelectedShapes()
+  
+  return <div>Selected: {selectedShapes.length}</div>
+})
+```
+
+### Minimize signal access in render
+
+```typescript
+// ❌ Bad: accesses signal in map, causes re-render for any shape change
+const ShapeList = track(() => {
+  const editor = useEditor()
+  const shapes = editor.getCurrentPageShapes()
+  
+  return shapes.map(shape => (
+    <ShapeItem key={shape.id} shape={shape} editor={editor} />
+  ))
+})
+
+// ✅ Good: only pass shape ID, child components subscribe individually
+const ShapeList = track(() => {
+  const editor = useEditor()
+  const shapeIds = editor.getCurrentPageShapeIds()
+  
+  return shapeIds.map(id => (
+    <ShapeItem key={id} shapeId={id} />
+  ))
+})
+
+const ShapeItem = track(({ shapeId }: { shapeId: TLShapeId }) => {
+  const editor = useEditor()
+  const shape = editor.getShape(shapeId)
+  return <div>{shape.type}</div>
+})
+```
+
+### Debounce expensive operations
+
+```typescript
+import { debounce } from '@tldraw/utils'
+import { useEffect } from 'react'
+
+function AutoSave() {
+  const editor = useEditor()
+  
+  useEffect(() => {
+    const debouncedSave = debounce(() => {
+      const snapshot = editor.getSnapshot()
+      localStorage.setItem('canvas', JSON.stringify(snapshot))
+    }, 1000)
+    
+    const dispose = editor.store.listen(debouncedSave)
+    return dispose
+  }, [editor])
+  
+  return null
+}
+```
+
+## Batching updates
+
+### Use transactions
+
+Batch multiple operations to trigger a single re-render:
+
+```typescript
+import { transact } from '@tldraw/state'
+
+// ❌ Bad: triggers 3 re-renders
+shapes.forEach(shape => {
+  editor.updateShape({
+    id: shape.id,
+    x: shape.x + 10,
+  })
+})
+
+// ✅ Good: triggers 1 re-render
+transact(() => {
+  shapes.forEach(shape => {
+    editor.updateShape({
+      id: shape.id,
+      x: shape.x + 10,
+    })
+  })
+})
+```
+
+### Batch history entries
+
+```typescript
+// Group related changes into single undo/redo step
+editor.batch(() => {
+  editor.createShape({ type: 'geo', x: 0, y: 0 })
+  editor.createShape({ type: 'geo', x: 100, y: 100 })
+  editor.createShape({ type: 'geo', x: 200, y: 200 })
+}, { history: 'record-preserveRedoStack' })
+```
+
+## Shape rendering optimization
+
+### Memoize expensive geometry
+
+```typescript
+import { Rectangle2d, Geometry2d } from '@tldraw/editor'
+
+class ComplexShapeUtil extends ShapeUtil<ComplexShape> {
+  private geometryCache = new WeakMap<ComplexShape, Geometry2d>()
+  
+  getGeometry(shape: ComplexShape): Geometry2d {
+    let cached = this.geometryCache.get(shape)
+    
+    if (!cached) {
+      cached = this.computeComplexGeometry(shape)
+      this.geometryCache.set(shape, cached)
+    }
+    
+    return cached
+  }
+  
+  private computeComplexGeometry(shape: ComplexShape): Geometry2d {
+    // Expensive geometry calculation
+    return new Rectangle2d({ width: shape.props.w, height: shape.props.h })
+  }
+}
+```
+
+### Optimize SVG exports
+
+```typescript
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  override toSvg(shape: MyShape) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    
+    // Use simple SVG primitives for better performance
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    rect.setAttribute('width', shape.props.w.toString())
+    rect.setAttribute('height', shape.props.h.toString())
+    rect.setAttribute('fill', shape.props.color)
+    
+    g.appendChild(rect)
+    return g
+  }
+}
+```
+
+### Virtualize large lists
+
+For UI panels with many items, use virtualization:
+
+```typescript
+import { track, useEditor } from '@tldraw/editor'
+import { useVirtualizer } from '@tanstack/react-virtual'
+
+const ShapesList = track(() => {
+  const editor = useEditor()
+  const shapeIds = editor.getCurrentPageShapeIds()
+  const parentRef = React.useRef<HTMLDivElement>(null)
+  
+  const virtualizer = useVirtualizer({
+    count: shapeIds.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+  })
+  
+  return (
+    <div ref={parentRef} style={{ height: '400px', overflow: 'auto' }}>
+      <div style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map(item => (
+          <div key={item.key} style={{ height: item.size }}>
+            <ShapeItem shapeId={shapeIds[item.index]} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+})
+```
+
+## Memory management
+
+### Clean up reactions
+
+```typescript
+import { react } from '@tldraw/state'
+
+class MyTool extends StateNode {
+  private cleanupReaction?: () => void
+  
+  override onEnter() {
+    this.cleanupReaction = react('my-reaction', () => {
+      // React to changes
+    })
+  }
+  
+  override onExit() {
+    this.cleanupReaction?.()
+    this.cleanupReaction = undefined
+  }
+}
+```
+
+### Avoid memory leaks with WeakMap
+
+```typescript
+// ✅ Good: uses WeakMap for automatic cleanup
+class ShapeCache {
+  private cache = new WeakMap<TLShape, CachedData>()
+  
+  get(shape: TLShape): CachedData {
+    let cached = this.cache.get(shape)
+    if (!cached) {
+      cached = this.compute(shape)
+      this.cache.set(shape, cached)
+    }
+    return cached
+  }
+}
+```
+
+## Export optimization
+
+### Optimize image exports
+
+```typescript
+import { Editor } from '@tldraw/editor'
+
+const editor = new Editor(options)
+
+// Export with lower quality for faster processing
+const { blob } = await editor.toImage(
+  editor.getSelectedShapeIds(),
+  {
+    format: 'jpeg',
+    quality: 0.8, // Lower quality = faster export
+    pixelRatio: 2, // Lower pixel ratio = smaller file
+  }
+)
+```
+
+### Batch exports
+
+```typescript
+// Export multiple shapes efficiently
+const shapeIds = editor.getCurrentPageShapeIds()
+const chunks = chunkArray(shapeIds, 50) // Process in batches
+
+for (const chunk of chunks) {
+  const { svg } = await editor.getSvgString(chunk)
+  await processChunk(svg)
+  
+  // Allow UI to remain responsive
+  await new Promise(resolve => setTimeout(resolve, 0))
+}
+```
+
+## Profiling tips
+
+### Monitor signal computations
+
+```typescript
+import { whyAmIRunning } from '@tldraw/state'
+
+const expensive = computed('expensive', () => {
+  if (process.env.NODE_ENV === 'development') {
+    whyAmIRunning()
+  }
+  
+  return expensiveComputation()
+})
+```
+
+### Track render counts
+
+```typescript
+const MyComponent = track(function MyComponent() {
+  const renderCount = React.useRef(0)
+  renderCount.current++
+  
+  console.log(`MyComponent rendered ${renderCount.current} times`)
+  
+  // Component code...
+})
+```
+
+### Use Performance API
+
+```typescript
+function measureOperation(name: string, fn: () => void) {
+  performance.mark(`${name}-start`)
+  fn()
+  performance.mark(`${name}-end`)
+  performance.measure(name, `${name}-start`, `${name}-end`)
+  
+  const measure = performance.getEntriesByName(name)[0]
+  console.log(`${name} took ${measure.duration}ms`)
+}
+
+measureOperation('create-shapes', () => {
+  for (let i = 0; i < 1000; i++) {
+    editor.createShape({ type: 'geo', x: i * 10, y: 0 })
+  }
+})
+```
+
+## Common performance pitfalls
+
+<Warning>
+**Avoid these common mistakes:**
+
+1. **Accessing all shapes when only IDs needed:**
+   ```typescript
+   // ❌ Bad
+   const count = editor.getCurrentPageShapes().length
+   
+   // ✅ Good
+   const count = editor.getCurrentPageShapeIds().size
+   ```
+
+2. **Creating new objects in computed:**
+   ```typescript
+   // ❌ Bad: new array every time
+   const ids = computed('ids', () => [...shapeIds])
+   
+   // ✅ Good: return existing array/set
+   const ids = computed('ids', () => shapeIds)
+   ```
+
+3. **Not using custom equality:**
+   ```typescript
+   // ❌ Bad: always different reference
+   const bounds = computed('bounds', () => ({ x: 0, y: 0, w: 100, h: 100 }))
+   
+   // ✅ Good: custom equality
+   const bounds = computed('bounds', () => ({ x: 0, y: 0, w: 100, h: 100 }), {
+     isEqual: (a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
+   })
+   ```
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="State management" icon="atom" href="/advanced/state-management">
+    Master reactive signals for better performance
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/advanced/architecture">
+    Understand the system architecture
+  </Card>
+  <Card title="Custom shapes" icon="shapes" href="/shapes/custom-shapes">
+    Build performant custom shapes
+  </Card>
+  <Card title="Testing" icon="vial" href="/testing/overview">
+    Performance testing strategies
+  </Card>
+</CardGroup>

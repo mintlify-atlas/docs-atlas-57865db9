@@ -1,0 +1,583 @@
+---
+title: UI primitive components
+description: Low-level UI components for building custom tldraw interfaces
+---
+
+The tldraw UI provides primitive components that can be used to build custom interfaces. These components are styled and designed to work seamlessly with the tldraw editor.
+
+## Button components
+
+### TldrawUiButton
+
+A styled button component with support for different visual types.
+
+```tsx
+import { TldrawUiButton } from 'tldraw'
+
+function CustomToolbar() {
+  return (
+    <div>
+      <TldrawUiButton type="primary" onClick={() => console.log('clicked')}>
+        Primary
+      </TldrawUiButton>
+      <TldrawUiButton type="normal" onClick={() => console.log('clicked')}>
+        Normal
+      </TldrawUiButton>
+      <TldrawUiButton type="danger" onClick={() => console.log('clicked')}>
+        Delete
+      </TldrawUiButton>
+    </div>
+  )
+}
+```
+
+#### Props
+
+<ParamField path="type" type="'normal' | 'primary' | 'danger' | 'low' | 'icon' | 'tool' | 'menu' | 'help'" required>
+  Visual style of the button.
+</ParamField>
+
+<ParamField path="disabled" type="boolean">
+  Whether the button is disabled.
+</ParamField>
+
+<ParamField path="isActive" type="boolean">
+  Whether the button appears in an active state.
+</ParamField>
+
+<ParamField path="htmlButtonType" type="'button' | 'submit' | 'reset'">
+  HTML button type attribute.
+</ParamField>
+
+<ParamField path="onClick" type="(e: React.MouseEvent) => void">
+  Click handler.
+</ParamField>
+
+<ParamField path="children" type="ReactNode">
+  Button content.
+</ParamField>
+
+### TldrawUiButtonIcon
+
+Icon component for use inside buttons.
+
+```tsx
+import { TldrawUiButton, TldrawUiButtonIcon } from 'tldraw'
+
+function IconButton() {
+  return (
+    <TldrawUiButton type="icon">
+      <TldrawUiButtonIcon icon="tool-pencil" />
+    </TldrawUiButton>
+  )
+}
+```
+
+### TldrawUiButtonLabel
+
+Label component for use inside buttons.
+
+```tsx
+import { TldrawUiButton, TldrawUiButtonLabel } from 'tldraw'
+
+function LabelButton() {
+  return (
+    <TldrawUiButton type="normal">
+      <TldrawUiButtonLabel>Click me</TldrawUiButtonLabel>
+    </TldrawUiButton>
+  )
+}
+```
+
+## Input components
+
+### TldrawUiInput
+
+A styled text input component with support for icons, labels, and keyboard shortcuts.
+
+```tsx
+import { TldrawUiInput } from 'tldraw'
+
+function SearchInput() {
+  const [value, setValue] = React.useState('')
+  
+  return (
+    <TldrawUiInput
+      label="Search"
+      icon="search"
+      value={value}
+      onValueChange={setValue}
+      onComplete={(val) => console.log('Completed with:', val)}
+      placeholder="Type to search..."
+    />
+  )
+}
+```
+
+#### Props
+
+<ParamField path="label" type="string">
+  Label text displayed above the input.
+</ParamField>
+
+<ParamField path="icon" type="string | TLUiIconType">
+  Icon displayed on the right side of the input.
+</ParamField>
+
+<ParamField path="iconLeft" type="string | TLUiIconType">
+  Icon displayed on the left side of the input.
+</ParamField>
+
+<ParamField path="iconLabel" type="string">
+  Accessible label for the icon.
+</ParamField>
+
+<ParamField path="value" type="string">
+  Controlled value.
+</ParamField>
+
+<ParamField path="defaultValue" type="string">
+  Uncontrolled default value.
+</ParamField>
+
+<ParamField path="placeholder" type="string">
+  Placeholder text.
+</ParamField>
+
+<ParamField path="autoFocus" type="boolean">
+  Auto-focus the input on mount.
+</ParamField>
+
+<ParamField path="autoSelect" type="boolean">
+  Auto-select input text on focus.
+</ParamField>
+
+<ParamField path="disabled" type="boolean">
+  Whether the input is disabled.
+</ParamField>
+
+<ParamField path="onValueChange" type="(value: string) => void">
+  Called when the input value changes.
+</ParamField>
+
+<ParamField path="onComplete" type="(value: string) => void">
+  Called when Enter is pressed.
+</ParamField>
+
+<ParamField path="onCancel" type="(value: string) => void">
+  Called when Escape is pressed.
+</ParamField>
+
+<ParamField path="onBlur" type="(value: string) => void">
+  Called when the input loses focus.
+</ParamField>
+
+<ParamField path="onFocus" type="() => void">
+  Called when the input gains focus.
+</ParamField>
+
+## Icon component
+
+### TldrawUiIcon
+
+Displays an icon from the tldraw icon set.
+
+```tsx
+import { TldrawUiIcon } from 'tldraw'
+
+function CustomUI() {
+  return (
+    <div>
+      <TldrawUiIcon icon="tool-pencil" label="Pencil" />
+      <TldrawUiIcon icon="check" label="Checked" small />
+      <TldrawUiIcon icon="trash" label="Delete" color="red" />
+    </div>
+  )
+}
+```
+
+#### Props
+
+<ParamField path="icon" type="string | TLUiIconType | ReactElement" required>
+  Icon identifier or custom React element.
+</ParamField>
+
+<ParamField path="label" type="string" required>
+  Accessible label for the icon.
+</ParamField>
+
+<ParamField path="small" type="boolean">
+  Display icon at small size.
+</ParamField>
+
+<ParamField path="color" type="string">
+  Icon color (CSS color value).
+</ParamField>
+
+<ParamField path="invertIcon" type="boolean">
+  Horizontally flip the icon.
+</ParamField>
+
+<ParamField path="className" type="string">
+  Additional CSS class names.
+</ParamField>
+
+## Dropdown menu components
+
+### TldrawUiDropdownMenuRoot
+
+Root container for a dropdown menu.
+
+```tsx
+import {
+  TldrawUiDropdownMenuRoot,
+  TldrawUiDropdownMenuTrigger,
+  TldrawUiDropdownMenuContent,
+  TldrawUiDropdownMenuItem,
+  TldrawUiButton,
+} from 'tldraw'
+
+function CustomMenu() {
+  return (
+    <TldrawUiDropdownMenuRoot id="custom-menu">
+      <TldrawUiDropdownMenuTrigger>
+        <TldrawUiButton type="menu">Menu</TldrawUiButton>
+      </TldrawUiDropdownMenuTrigger>
+      <TldrawUiDropdownMenuContent>
+        <TldrawUiDropdownMenuItem>
+          <TldrawUiButton type="menu" onClick={() => console.log('Item 1')}>
+            Item 1
+          </TldrawUiButton>
+        </TldrawUiDropdownMenuItem>
+      </TldrawUiDropdownMenuContent>
+    </TldrawUiDropdownMenuRoot>
+  )
+}
+```
+
+#### Props
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the menu.
+</ParamField>
+
+<ParamField path="modal" type="boolean" default="false">
+  Whether the menu is modal.
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  Menu content.
+</ParamField>
+
+### TldrawUiDropdownMenuTrigger
+
+Trigger button for the dropdown menu.
+
+#### Props
+
+<ParamField path="children" type="ReactNode" required>
+  Trigger content (typically a button).
+</ParamField>
+
+### TldrawUiDropdownMenuContent
+
+Container for menu items.
+
+#### Props
+
+<ParamField path="side" type="'bottom' | 'top' | 'right' | 'left'" default="'bottom'">
+  Which side of the trigger to display the menu.
+</ParamField>
+
+<ParamField path="align" type="'start' | 'center' | 'end'" default="'start'">
+  How to align the menu relative to the trigger.
+</ParamField>
+
+<ParamField path="sideOffset" type="number" default="8">
+  Distance from the trigger.
+</ParamField>
+
+<ParamField path="alignOffset" type="number" default="8">
+  Offset along the alignment axis.
+</ParamField>
+
+<ParamField path="className" type="string">
+  Additional CSS class names.
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  Menu items.
+</ParamField>
+
+### TldrawUiDropdownMenuItem
+
+Wrapper for individual menu items.
+
+#### Props
+
+<ParamField path="noClose" type="boolean">
+  Prevent closing the menu when this item is clicked.
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  Item content (typically a button).
+</ParamField>
+
+### TldrawUiDropdownMenuCheckboxItem
+
+Checkbox menu item.
+
+```tsx
+import { TldrawUiDropdownMenuCheckboxItem } from 'tldraw'
+
+function CheckboxMenuItem() {
+  const [checked, setChecked] = React.useState(false)
+  
+  return (
+    <TldrawUiDropdownMenuCheckboxItem
+      checked={checked}
+      onSelect={() => setChecked(!checked)}
+      title="Enable feature"
+    >
+      Enable feature
+    </TldrawUiDropdownMenuCheckboxItem>
+  )
+}
+```
+
+#### Props
+
+<ParamField path="checked" type="boolean">
+  Whether the checkbox is checked.
+</ParamField>
+
+<ParamField path="onSelect" type="(e: Event) => void">
+  Called when the item is selected.
+</ParamField>
+
+<ParamField path="disabled" type="boolean">
+  Whether the item is disabled.
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Title attribute for accessibility.
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  Item content.
+</ParamField>
+
+### TldrawUiDropdownMenuGroup
+
+Groups related menu items.
+
+```tsx
+import { TldrawUiDropdownMenuGroup } from 'tldraw'
+
+function GroupedMenu() {
+  return (
+    <TldrawUiDropdownMenuContent>
+      <TldrawUiDropdownMenuGroup>
+        {/* Group 1 items */}
+      </TldrawUiDropdownMenuGroup>
+      <TldrawUiDropdownMenuGroup>
+        {/* Group 2 items */}
+      </TldrawUiDropdownMenuGroup>
+    </TldrawUiDropdownMenuContent>
+  )
+}
+```
+
+### TldrawUiDropdownMenuSub
+
+Submenu container.
+
+```tsx
+import {
+  TldrawUiDropdownMenuSub,
+  TldrawUiDropdownMenuSubTrigger,
+  TldrawUiDropdownMenuSubContent,
+} from 'tldraw'
+
+function Submenu() {
+  return (
+    <TldrawUiDropdownMenuSub id="submenu">
+      <TldrawUiDropdownMenuSubTrigger label="More options" />
+      <TldrawUiDropdownMenuSubContent>
+        {/* Submenu items */}
+      </TldrawUiDropdownMenuSubContent>
+    </TldrawUiDropdownMenuSub>
+  )
+}
+```
+
+## Other primitive components
+
+### TldrawUiKbd
+
+Displays keyboard shortcut hints.
+
+```tsx
+import { TldrawUiKbd } from 'tldraw'
+
+function ShortcutHint() {
+  return (
+    <div>
+      Press <TldrawUiKbd>Cmd+Z</TldrawUiKbd> to undo
+    </div>
+  )
+}
+```
+
+### TldrawUiSlider
+
+Slider input component.
+
+```tsx
+import { TldrawUiSlider } from 'tldraw'
+
+function OpacitySlider() {
+  const [opacity, setOpacity] = React.useState(1)
+  
+  return (
+    <TldrawUiSlider
+      value={opacity}
+      onValueChange={setOpacity}
+      min={0}
+      max={1}
+      step={0.1}
+      label="Opacity"
+    />
+  )
+}
+```
+
+### TldrawUiSelect
+
+Select dropdown component.
+
+```tsx
+import { TldrawUiSelect } from 'tldraw'
+
+function FontSelector() {
+  const [font, setFont] = React.useState('sans')
+  
+  return (
+    <TldrawUiSelect
+      value={font}
+      onValueChange={setFont}
+      options={[
+        { value: 'sans', label: 'Sans Serif' },
+        { value: 'serif', label: 'Serif' },
+        { value: 'mono', label: 'Monospace' },
+      ]}
+    />
+  )
+}
+```
+
+## Layout components
+
+### TldrawUiToolbar
+
+Toolbar container with automatic layout.
+
+### TldrawUiContextualToolbar
+
+Floating toolbar that appears near selected shapes.
+
+### TldrawUiDialog
+
+Modal dialog container.
+
+### TldrawUiPopover
+
+Popover container for floating UI elements.
+
+## Usage patterns
+
+### Building a custom toolbar
+
+```tsx
+import {
+  TldrawUiButton,
+  TldrawUiButtonIcon,
+  useTools,
+  useEditor,
+} from 'tldraw'
+
+function CustomToolbar() {
+  const tools = useTools()
+  const editor = useEditor()
+  
+  return (
+    <div className="custom-toolbar">
+      {['select', 'draw', 'eraser'].map((toolId) => {
+        const tool = tools[toolId]
+        const isActive = editor.getCurrentToolId() === toolId
+        
+        return (
+          <TldrawUiButton
+            key={toolId}
+            type="tool"
+            isActive={isActive}
+            onClick={() => tool.onSelect('toolbar')}
+          >
+            <TldrawUiButtonIcon icon={tool.icon} />
+          </TldrawUiButton>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+### Creating a custom menu
+
+```tsx
+import {
+  TldrawUiDropdownMenuRoot,
+  TldrawUiDropdownMenuTrigger,
+  TldrawUiDropdownMenuContent,
+  TldrawUiDropdownMenuItem,
+  TldrawUiDropdownMenuGroup,
+  TldrawUiButton,
+  TldrawUiButtonIcon,
+  useActions,
+} from 'tldraw'
+
+function CustomMenu() {
+  const actions = useActions()
+  
+  return (
+    <TldrawUiDropdownMenuRoot id="custom-menu">
+      <TldrawUiDropdownMenuTrigger>
+        <TldrawUiButton type="menu">
+          <TldrawUiButtonIcon icon="menu" />
+        </TldrawUiButton>
+      </TldrawUiDropdownMenuTrigger>
+      
+      <TldrawUiDropdownMenuContent>
+        <TldrawUiDropdownMenuGroup>
+          <TldrawUiDropdownMenuItem>
+            <TldrawUiButton
+              type="menu"
+              onClick={() => actions['undo'].onSelect('menu')}
+            >
+              Undo
+            </TldrawUiButton>
+          </TldrawUiDropdownMenuItem>
+          <TldrawUiDropdownMenuItem>
+            <TldrawUiButton
+              type="menu"
+              onClick={() => actions['redo'].onSelect('menu')}
+            >
+              Redo
+            </TldrawUiButton>
+          </TldrawUiDropdownMenuItem>
+        </TldrawUiDropdownMenuGroup>
+      </TldrawUiDropdownMenuContent>
+    </TldrawUiDropdownMenuRoot>
+  )
+}
+```

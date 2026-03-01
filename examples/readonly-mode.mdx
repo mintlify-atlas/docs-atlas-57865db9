@@ -1,0 +1,123 @@
+---
+title: Read-only mode
+description: Make the tldraw editor read-only to disable editing functionality
+---
+
+You can make the tldraw editor read-only by updating the `isReadonly` instance state. This disables all editing functionality while keeping navigation and viewing features.
+
+## Implementation
+
+```tsx ReadOnlyExample.tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function ReadOnlyExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw
+        persistenceKey="example"
+        onMount={(editor) => {
+          editor.updateInstanceState({ isReadonly: true })
+        }}
+      />
+    </div>
+  )
+}
+```
+
+## What happens in read-only mode
+
+When read-only mode is enabled:
+
+- Users cannot create, edit, or delete shapes
+- The toolbar shows only the select tool, hand tool, and laser pointer
+- Users can still pan and zoom the canvas
+- Selection is still possible (but not modification)
+- Context menus are disabled for editing actions
+
+## Dynamic read-only state
+
+You can toggle read-only mode dynamically:
+
+```tsx
+import { Tldraw, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+function ReadOnlyToggle() {
+  const editor = useEditor()
+  const isReadonly = editor.getInstanceState().isReadonly
+
+  return (
+    <button
+      onClick={() => {
+        editor.updateInstanceState({ 
+          isReadonly: !isReadonly 
+        })
+      }}
+    >
+      {isReadonly ? 'Enable editing' : 'Disable editing'}
+    </button>
+  )
+}
+
+export default function Example() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw>
+        <ReadOnlyToggle />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Use cases
+
+<CardGroup cols={2}>
+
+<Card title="Presentations" icon="presentation">
+Display diagrams and drawings without allowing modifications
+</Card>
+
+<Card title="Approval workflows" icon="circle-check">
+Show content for review before enabling editing
+</Card>
+
+<Card title="Public galleries" icon="images">
+Share work publicly while preventing unwanted changes
+</Card>
+
+<Card title="Archive viewing" icon="box-archive">
+Browse historical content without risk of accidental edits
+</Card>
+
+</CardGroup>
+
+## Conditional read-only
+
+You might want to conditionally enable read-only mode based on user permissions:
+
+```tsx
+export default function ConditionalReadOnly({ userCanEdit }: { userCanEdit: boolean }) {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw
+        onMount={(editor) => {
+          editor.updateInstanceState({ 
+            isReadonly: !userCanEdit 
+          })
+        }}
+      />
+    </div>
+  )
+}
+```
+
+<Note>
+Read-only mode is different from hiding the UI. Even with `hideUi` prop, users can still edit shapes. Use `isReadonly` to truly prevent editing.
+</Note>
+
+## Related
+
+- [Custom UI](/examples/custom-ui) - Build your own interface
+- [Controlled editor](/examples/controlled-editor) - Control the editor programmatically

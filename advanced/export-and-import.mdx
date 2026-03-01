@@ -1,0 +1,590 @@
+---
+title: Export and import functionality
+description: Exporting shapes to images, SVG, and JSON, plus importing external content
+---
+
+The tldraw SDK provides powerful export and import capabilities for shapes, allowing you to save and share canvas content in various formats including images (PNG, JPEG, WebP), SVG, and JSON.
+
+## Exporting to images
+
+### Basic image export
+
+Export shapes to PNG, JPEG, or WebP formats:
+
+```typescript
+import { Editor } from '@tldraw/editor'
+
+const editor = new Editor(options)
+
+// Export selected shapes as PNG
+const { blob } = await editor.toImage(
+  editor.getSelectedShapeIds(),
+  {
+    format: 'png',
+    quality: 1,
+    pixelRatio: 2,
+  }
+)
+
+// Download the image
+const url = URL.createObjectURL(blob)
+const link = document.createElement('a')
+link.href = url
+link.download = 'my-shapes.png'
+link.click()
+URL.revokeObjectURL(url)
+```
+
+### Export formats
+
+Supported image formats:
+
+- **PNG:** Lossless compression, supports transparency
+- **JPEG:** Lossy compression, smaller file sizes, no transparency
+- **WebP:** Modern format with better compression, supports transparency
+
+```typescript
+// PNG with transparency
+await editor.toImage(shapeIds, {
+  format: 'png',
+  quality: 1,
+  background: false, // Transparent background
+})
+
+// JPEG with white background
+await editor.toImage(shapeIds, {
+  format: 'jpeg',
+  quality: 0.9,
+  background: true,
+})
+
+// WebP with custom quality
+await editor.toImage(shapeIds, {
+  format: 'webp',
+  quality: 0.85,
+  pixelRatio: 2,
+})
+```
+
+### Export options
+
+```typescript
+import { TLImageExportOptions } from '@tldraw/editor'
+
+const options: TLImageExportOptions = {
+  // Image format
+  format: 'png' | 'jpeg' | 'webp',
+  
+  // Quality (0-1, affects JPEG and WebP)
+  quality: 0.9,
+  
+  // Pixel ratio for high-DPI displays
+  pixelRatio: 2,
+  
+  // Include background
+  background: true,
+  
+  // Padding around shapes (in pixels)
+  padding: 32,
+  
+  // Specific bounds to export (overrides shape bounds)
+  bounds: { x: 0, y: 0, w: 1000, h: 1000 },
+  
+  // Scaling factor
+  scale: 1,
+}
+
+const { blob, width, height } = await editor.toImage(shapeIds, options)
+```
+
+<Tip>
+For high-quality exports, use `pixelRatio: 2` or higher. The exported image will be larger but look sharper on high-DPI displays.
+</Tip>
+
+### Using exportAs helper
+
+The `@tldraw/tldraw` package provides a convenient `exportAs` helper:
+
+```typescript
+import { exportAs } from 'tldraw'
+
+// Automatically generates filename and triggers download
+await exportAs(
+  editor,
+  editor.getSelectedShapeIds(),
+  {
+    format: 'png',
+    name: 'my-drawing', // Optional custom name
+  }
+)
+```
+
+The helper automatically:
+- Generates timestamps for filenames
+- Uses frame names when exporting a single frame
+- Triggers browser download
+- Handles file creation and cleanup
+
+## Exporting to SVG
+
+### Basic SVG export
+
+```typescript
+// Get SVG string
+const result = await editor.getSvgString(
+  editor.getSelectedShapeIds(),
+  {
+    background: true,
+    padding: 0,
+    scale: 1,
+  }
+)
+
+if (result) {
+  const { svg, width, height } = result
+  
+  // Download SVG
+  const blob = new Blob([svg], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'shapes.svg'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+```
+
+### SVG export options
+
+```typescript
+import { TLSvgExportOptions } from '@tldraw/editor'
+
+const options: TLSvgExportOptions = {
+  // Include background color
+  background: true,
+  
+  // Padding around shapes
+  padding: 16,
+  
+  // Scaling factor
+  scale: 1,
+  
+  // Bounds to export
+  bounds: { x: 0, y: 0, w: 800, h: 600 },
+}
+
+const result = await editor.getSvgString(shapeIds, options)
+```
+
+### SVG with embedded assets
+
+Images and other assets are automatically embedded as data URLs:
+
+```typescript
+const result = await editor.getSvgString(shapeIds, {
+  background: false,
+})
+
+if (result) {
+  const { svg } = result
+  // SVG contains embedded images as data URLs
+  console.log(svg.includes('data:image')) // true if images present
+}
+```
+
+<Warning>
+Large images embedded in SVG can result in very large file sizes. Consider exporting as PNG for canvases with many images.
+</Warning>
+
+## Copying to clipboard
+
+### Copy as image
+
+```typescript
+import { copyAs } from 'tldraw'
+
+// Copy selected shapes as PNG to clipboard
+await copyAs(
+  editor,
+  editor.getSelectedShapeIds(),
+  { format: 'png' }
+)
+
+// Copy as SVG
+await copyAs(
+  editor,
+  editor.getSelectedShapeIds(),
+  { format: 'svg' }
+)
+```
+
+### Implementation details
+
+The `copyAs` function uses the Clipboard API:
+
+```typescript
+// Simplified implementation
+export async function copyAs(
+  editor: Editor,
+  ids: TLShapeId[],
+  opts: { format: 'png' | 'svg' }
+) {
+  if (!navigator.clipboard) {
+    throw new Error('Clipboard not supported')
+  }
+  
+  const { blobPromise, mimeType } = exportToImagePromiseForClipboard(
+    editor,
+    ids,
+    opts
+  )
+  
+  await navigator.clipboard.write([
+    new ClipboardItem({ [mimeType]: blobPromise })
+  ])
+}
+```
+
+## Exporting to JSON
+
+### Export shape data
+
+Export shapes as structured JSON data:
+
+```typescript
+// Get content from selected shapes
+const content = editor.getContentFromCurrentPage(
+  editor.getSelectedShapeIds()
+)
+
+// Resolve embedded assets (images, videos)
+const resolvedContent = await editor.resolveAssetsInContent(content)
+
+// Serialize to JSON
+const json = JSON.stringify(resolvedContent, null, 2)
+
+// Download JSON file
+const blob = new Blob([json], { type: 'application/json' })
+const url = URL.createObjectURL(blob)
+const link = document.createElement('a')
+link.href = url
+link.download = 'shapes.json'
+link.click()
+URL.revokeObjectURL(url)
+```
+
+### JSON structure
+
+The exported JSON includes shapes, bindings, and assets:
+
+```json
+{
+  "shapes": [
+    {
+      "id": "shape:abc123",
+      "type": "geo",
+      "x": 100,
+      "y": 200,
+      "props": {
+        "w": 300,
+        "h": 200,
+        "geo": "rectangle",
+        "color": "blue"
+      }
+    }
+  ],
+  "bindings": [],
+  "assets": [
+    {
+      "id": "asset:img123",
+      "type": "image",
+      "props": {
+        "w": 1920,
+        "h": 1080,
+        "src": "data:image/png;base64,..."
+      }
+    }
+  ]
+}
+```
+
+## Importing content
+
+### Paste from clipboard
+
+```typescript
+// Handle paste event
+editor.addListener('paste', async (event) => {
+  const clipboardData = event.clipboardData
+  
+  if (clipboardData?.items) {
+    for (const item of clipboardData.items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          // Create image asset
+          const asset = await editor.createAssetFromFile(file)
+          
+          // Create image shape
+          editor.createShape({
+            type: 'image',
+            x: editor.inputs.currentPagePoint.x,
+            y: editor.inputs.currentPagePoint.y,
+            props: {
+              assetId: asset.id,
+              w: asset.props.w,
+              h: asset.props.h,
+            },
+          })
+        }
+      }
+    }
+  }
+})
+```
+
+### Import from JSON
+
+```typescript
+// Load JSON content
+const response = await fetch('/api/canvas-data')
+const content = await response.json()
+
+// Put content on canvas at point
+editor.putContentOntoCurrentPage(
+  content,
+  {
+    point: { x: 0, y: 0 },
+    select: true,
+  }
+)
+```
+
+### Import images
+
+```typescript
+import { dataUrlToFile } from '@tldraw/editor'
+
+// From file input
+const input = document.createElement('input')
+input.type = 'file'
+input.accept = 'image/*'
+input.onchange = async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  
+  // Create asset and shape
+  const asset = await editor.createAssetFromFile(file)
+  editor.createShape({
+    type: 'image',
+    x: 100,
+    y: 100,
+    props: {
+      assetId: asset.id,
+      w: asset.props.w,
+      h: asset.props.h,
+    },
+  })
+}
+input.click()
+
+// From data URL
+const dataUrl = 'data:image/png;base64,...'
+const file = dataUrlToFile(dataUrl, 'image.png', 'image/png')
+const asset = await editor.createAssetFromFile(file)
+```
+
+### Import from URL
+
+```typescript
+// Create image shape from URL
+const imageUrl = 'https://example.com/image.png'
+
+// Fetch and create asset
+const response = await fetch(imageUrl)
+const blob = await response.blob()
+const file = new File([blob], 'image.png', { type: blob.type })
+const asset = await editor.createAssetFromFile(file)
+
+editor.createShape({
+  type: 'image',
+  x: 0,
+  y: 0,
+  props: {
+    assetId: asset.id,
+    w: asset.props.w,
+    h: asset.props.h,
+  },
+})
+```
+
+## Custom export formats
+
+### Implementing custom exports
+
+Extend `ShapeUtil` to support custom export formats:
+
+```typescript
+import { ShapeUtil } from '@tldraw/editor'
+
+class MyShapeUtil extends ShapeUtil<MyShape> {
+  // Custom SVG export
+  override toSvg(shape: MyShape) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    rect.setAttribute('width', shape.props.w.toString())
+    rect.setAttribute('height', shape.props.h.toString())
+    rect.setAttribute('fill', shape.props.color)
+    rect.setAttribute('data-custom', shape.props.metadata)
+    
+    g.appendChild(rect)
+    return g
+  }
+  
+  // Custom background export
+  override toBackgroundSvg(shape: MyShape) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    // Add background elements
+    return g
+  }
+}
+```
+
+### Export with metadata
+
+```typescript
+// Add metadata to SVG export
+const result = await editor.getSvgString(shapeIds)
+
+if (result) {
+  let { svg } = result
+  
+  // Add custom metadata
+  svg = svg.replace(
+    '<svg',
+    `<svg data-exported-at="${new Date().toISOString()}" data-version="1.0"`
+  )
+  
+  // Add description
+  const desc = document.createElementNS('http://www.w3.org/2000/svg', 'desc')
+  desc.textContent = 'Exported from tldraw'
+  // Insert into SVG...
+}
+```
+
+## Advanced export techniques
+
+### Export specific bounds
+
+```typescript
+import { Box } from '@tldraw/editor'
+
+// Export a specific region
+const customBounds = new Box(0, 0, 1000, 800)
+
+const { blob } = await editor.toImage(shapeIds, {
+  bounds: customBounds,
+  padding: 0,
+})
+```
+
+### Export with custom scale
+
+```typescript
+// Export at 2x size
+const { blob } = await editor.toImage(shapeIds, {
+  scale: 2,
+  pixelRatio: 1,
+})
+
+// Export at half size
+const { blob: smallBlob } = await editor.toImage(shapeIds, {
+  scale: 0.5,
+})
+```
+
+### Batch exports
+
+```typescript
+// Export all shapes individually
+const shapes = editor.getCurrentPageShapes()
+
+for (const shape of shapes) {
+  const { blob } = await editor.toImage([shape.id], {
+    format: 'png',
+    padding: 10,
+  })
+  
+  // Save each shape
+  await saveBlob(blob, `shape-${shape.id}.png`)
+}
+```
+
+### Export frames separately
+
+```typescript
+// Get all frame shapes
+const frames = editor.getCurrentPageShapes()
+  .filter(s => s.type === 'frame')
+
+for (const frame of frames) {
+  // Get shapes inside frame
+  const childShapes = editor.getSortedChildIdsForParent(frame.id)
+  
+  // Export frame and its contents
+  const { blob } = await editor.toImage([frame.id, ...childShapes], {
+    format: 'png',
+    padding: 0,
+  })
+  
+  // Download with frame name
+  downloadBlob(blob, `${frame.props.name || frame.id}.png`)
+}
+```
+
+## Performance considerations
+
+<Tip>
+**Optimize exports for better performance:**
+
+- Use lower `quality` values for faster JPEG/WebP exports
+- Reduce `pixelRatio` for smaller file sizes
+- Export in batches with delays to avoid blocking UI
+- Use WebP for best compression with quality
+- Cache exported blobs when exporting the same content multiple times
+</Tip>
+
+```typescript
+// Optimized batch export
+const chunkSize = 10
+const shapeChunks = chunkArray(allShapes, chunkSize)
+
+for (const chunk of shapeChunks) {
+  await Promise.all(
+    chunk.map(shape => 
+      editor.toImage([shape.id], { format: 'webp', quality: 0.8 })
+    )
+  )
+  
+  // Allow UI to breathe
+  await new Promise(resolve => setTimeout(resolve, 100))
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom shapes" icon="shapes" href="/shapes/custom-shapes">
+    Implement custom export formats for your shapes
+  </Card>
+  <Card title="Assets" icon="image" href="/editor/assets">
+    Learn about asset management
+  </Card>
+  <Card title="Clipboard" icon="clipboard" href="/editor/clipboard">
+    Handle clipboard operations
+  </Card>
+  <Card title="Performance" icon="gauge-high" href="/advanced/performance">
+    Optimize export performance
+  </Card>
+</CardGroup>

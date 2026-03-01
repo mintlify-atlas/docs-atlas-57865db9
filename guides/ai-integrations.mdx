@@ -1,0 +1,742 @@
+---
+title: AI integrations
+description: Learn how to integrate AI capabilities into your tldraw app
+---
+
+Integrate AI capabilities into your tldraw app for features like shape generation, image analysis, and intelligent assistance.
+
+## Overview
+
+Common AI integrations with tldraw:
+
+- **Shape generation**: Create shapes from text prompts
+- **Image analysis**: Extract data from uploaded images
+- **Smart editing**: AI-powered suggestions and transformations
+- **Natural language commands**: Control the editor with text
+- **Content generation**: Generate diagrams, flowcharts, wireframes
+
+## Shape generation from prompts
+
+Create shapes based on AI-generated layouts:
+
+<Steps>
+  <Step title="Build the prompt interface">
+    ```tsx
+    import { useState } from 'react'
+    import { Tldraw, useEditor } from 'tldraw'
+
+    function AIPromptPanel() {
+      const editor = useEditor()
+      const [prompt, setPrompt] = useState('')
+      const [isGenerating, setIsGenerating] = useState(false)
+
+      const handleGenerate = async () => {
+        setIsGenerating(true)
+        
+        try {
+          const shapes = await generateShapesFromPrompt(prompt)
+          createShapesOnCanvas(editor, shapes)
+        } catch (error) {
+          console.error('Generation failed:', error)
+        } finally {
+          setIsGenerating(false)
+        }
+      }
+
+      return (
+        <div className="ai-prompt-panel">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe what you want to create..."
+          />
+          <button onClick={handleGenerate} disabled={isGenerating}>
+            {isGenerating ? 'Generating...' : 'Generate'}
+          </button>
+        </div>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Call AI service">
+    ```typescript
+    async function generateShapesFromPrompt(prompt: string) {
+      const response = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+
+      const data = await response.json()
+      return data.shapes // Array of shape definitions
+    }
+    ```
+  </Step>
+
+  <Step title="Create shapes on canvas">
+    ```typescript
+    import { Editor, createShapeId } from 'tldraw'
+
+    interface AIShape {
+      type: string
+      x: number
+      y: number
+      props: Record<string, any>
+    }
+
+    function createShapesOnCanvas(editor: Editor, shapes: AIShape[]) {
+      const newShapes = shapes.map(shape => ({
+        id: createShapeId(),
+        type: shape.type,
+        x: shape.x,
+        y: shape.y,
+        props: shape.props,
+      }))
+
+      editor.createShapes(newShapes)
+      
+      // Select and zoom to new shapes
+      const ids = newShapes.map(s => s.id)
+      editor.select(...ids)
+      editor.zoomToSelection()
+    }
+    ```
+  </Step>
+</Steps>
+
+## Image to diagram conversion
+
+Extract structured data from uploaded images:
+
+```tsx
+import { Editor, useEditor } from 'tldraw'
+import { useState } from 'react'
+
+function ImageToShapesButton() {
+  const editor = useEditor()
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsProcessing(true)
+
+    try {
+      // Convert image to base64
+      const base64 = await fileToBase64(file)
+
+      // Send to AI vision API
+      const response = await fetch('/api/ai/analyze-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64 }),
+      })
+
+      const { shapes, connections } = await response.json()
+
+      // Create shapes
+      createShapesOnCanvas(editor, shapes)
+      
+      // Create arrows for connections
+      createConnections(editor, connections)
+    } catch (error) {
+      console.error('Image analysis failed:', error)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <div>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        disabled={isProcessing}
+      />
+      {isProcessing && <span>Analyzing image...</span>}
+    </div>
+  )
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+  })
+}
+
+function createConnections(editor: Editor, connections: Array<{ from: string; to: string }>) {
+  connections.forEach(({ from, to }) => {
+    editor.createShape({
+      type: 'arrow',
+      props: {
+        start: { type: 'binding', boundShapeId: from },
+        end: { type: 'binding', boundShapeId: to },
+      },
+    })
+  })
+}
+```
+
+## Natural language commands
+
+Control the editor with text commands:
+
+```tsx
+import { Editor, useEditor } from 'tldraw'
+import { useState } from 'react'
+
+function NaturalLanguageInput() {
+  const editor = useEditor()
+  const [command, setCommand] = useState('')
+
+  const handleCommand = async () => {
+    const intent = await parseCommand(command)
+    executeIntent(editor, intent)
+    setCommand('')
+  }
+
+  return (
+    <div className="nl-input">
+      <input
+        type="text"
+        value={command}
+        onChange={(e) => setCommand(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleCommand()}
+        placeholder="Try: 'create a red circle' or 'align selected shapes'"
+      />
+    </div>
+  )
+}
+
+async function parseCommand(text: string) {
+  // Call AI to parse intent
+  const response = await fetch('/api/ai/parse-command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+
+  return response.json()
+}
+
+function executeIntent(editor: Editor, intent: any) {
+  switch (intent.action) {
+    case 'create_shape':
+      editor.createShape({
+        type: intent.shapeType,
+        x: 100,
+        y: 100,
+        props: intent.props,
+      })
+      break
+
+    case 'align_shapes':
+      const selectedIds = editor.getSelectedShapeIds()
+      if (intent.direction === 'horizontal') {
+        editor.alignShapes(selectedIds, 'middle')
+      } else {
+        editor.alignShapes(selectedIds, 'center')
+      }
+      break
+
+    case 'change_color':
+      editor.setStyleForSelectedShapes('color', intent.color)
+      break
+
+    case 'delete_all':
+      const allIds = editor.getCurrentPageShapeIds()
+      editor.deleteShapes([...allIds])
+      break
+  }
+}
+```
+
+## AI-powered shape suggestions
+
+Suggest improvements to existing shapes:
+
+```tsx
+import { Editor, TLShape, useEditor, track } from 'tldraw'
+import { useState, useEffect } from 'react'
+
+const AISuggestions = track(() => {
+  const editor = useEditor()
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const selectedShapes = editor.getSelectedShapes()
+
+  useEffect(() => {
+    if (selectedShapes.length === 0) {
+      setSuggestions([])
+      return
+    }
+
+    // Get AI suggestions for selected shapes
+    getSuggestions(selectedShapes).then(setSuggestions)
+  }, [selectedShapes])
+
+  const applySuggestion = async (suggestion: string) => {
+    const changes = await getChangesForSuggestion(selectedShapes, suggestion)
+    
+    changes.forEach(change => {
+      editor.updateShape(change)
+    })
+  }
+
+  if (suggestions.length === 0) return null
+
+  return (
+    <div className="ai-suggestions">
+      <h3>AI Suggestions</h3>
+      {suggestions.map((suggestion, i) => (
+        <button key={i} onClick={() => applySuggestion(suggestion)}>
+          {suggestion}
+        </button>
+      ))}
+    </div>
+  )
+})
+
+async function getSuggestions(shapes: TLShape[]): Promise<string[]> {
+  const response = await fetch('/api/ai/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shapes }),
+  })
+
+  const data = await response.json()
+  return data.suggestions
+}
+
+async function getChangesForSuggestion(shapes: TLShape[], suggestion: string) {
+  const response = await fetch('/api/ai/apply-suggestion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shapes, suggestion }),
+  })
+
+  return response.json()
+}
+```
+
+## Diagram generation
+
+Generate complete diagrams from descriptions:
+
+```typescript
+import { Editor, createShapeId } from 'tldraw'
+
+interface DiagramSpec {
+  type: 'flowchart' | 'wireframe' | 'mindmap' | 'architecture'
+  description: string
+  style?: 'minimal' | 'detailed' | 'colorful'
+}
+
+async function generateDiagram(editor: Editor, spec: DiagramSpec) {
+  // Call AI service
+  const response = await fetch('/api/ai/generate-diagram', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(spec),
+  })
+
+  const { nodes, edges, layout } = await response.json()
+
+  // Create nodes
+  const nodeShapes = nodes.map((node: any) => ({
+    id: createShapeId(node.id),
+    type: getShapeTypeForNode(node),
+    x: node.x,
+    y: node.y,
+    props: {
+      text: node.label,
+      color: node.color || 'black',
+      w: node.width || 200,
+      h: node.height || 100,
+    },
+  }))
+
+  editor.createShapes(nodeShapes)
+
+  // Create connections
+  const arrowShapes = edges.map((edge: any) => ({
+    id: createShapeId(),
+    type: 'arrow',
+    props: {
+      start: { 
+        type: 'binding', 
+        boundShapeId: createShapeId(edge.from) 
+      },
+      end: { 
+        type: 'binding', 
+        boundShapeId: createShapeId(edge.to) 
+      },
+      label: edge.label,
+    },
+  }))
+
+  editor.createShapes(arrowShapes)
+
+  // Zoom to fit
+  editor.zoomToFit({ animation: { duration: 400 } })
+}
+
+function getShapeTypeForNode(node: any): string {
+  switch (node.type) {
+    case 'process': return 'geo'
+    case 'decision': return 'geo' // with geo prop 'diamond'
+    case 'component': return 'frame'
+    default: return 'text'
+  }
+}
+
+// Usage
+function DiagramGenerator() {
+  const editor = useEditor()
+  const [spec, setSpec] = useState<DiagramSpec>({
+    type: 'flowchart',
+    description: '',
+    style: 'minimal',
+  })
+
+  return (
+    <div>
+      <select 
+        value={spec.type} 
+        onChange={(e) => setSpec({ ...spec, type: e.target.value as any })}
+      >
+        <option value="flowchart">Flowchart</option>
+        <option value="wireframe">Wireframe</option>
+        <option value="mindmap">Mind Map</option>
+        <option value="architecture">Architecture</option>
+      </select>
+      
+      <textarea
+        value={spec.description}
+        onChange={(e) => setSpec({ ...spec, description: e.target.value })}
+        placeholder="Describe your diagram..."
+      />
+      
+      <button onClick={() => generateDiagram(editor, spec)}>
+        Generate
+      </button>
+    </div>
+  )
+}
+```
+
+## Smart autocomplete
+
+Provide AI-powered text suggestions:
+
+```tsx
+import { Editor, useEditor, track } from 'tldraw'
+import { useState, useEffect } from 'react'
+
+const SmartTextInput = track(() => {
+  const editor = useEditor()
+  const selectedShapes = editor.getSelectedShapes()
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  
+  // Only show for text shapes
+  const textShape = selectedShapes.find(s => s.type === 'text')
+  if (!textShape) return null
+
+  const currentText = textShape.props.text || ''
+
+  useEffect(() => {
+    if (currentText.length < 3) {
+      setSuggestions([])
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      const response = await fetch('/api/ai/autocomplete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: currentText,
+          context: getCanvasContext(editor)
+        }),
+      })
+
+      const { completions } = await response.json()
+      setSuggestions(completions)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [currentText, editor])
+
+  const applySuggestion = (completion: string) => {
+    editor.updateShape({
+      id: textShape.id,
+      type: 'text',
+      props: { text: completion },
+    })
+  }
+
+  if (suggestions.length === 0) return null
+
+  return (
+    <div className="autocomplete-panel">
+      {suggestions.map((suggestion, i) => (
+        <button key={i} onClick={() => applySuggestion(suggestion)}>
+          {suggestion}
+        </button>
+      ))}
+    </div>
+  )
+})
+
+function getCanvasContext(editor: Editor) {
+  const shapes = editor.getCurrentPageShapes()
+  return {
+    shapeTypes: [...new Set(shapes.map(s => s.type))],
+    shapeCount: shapes.length,
+  }
+}
+```
+
+## Context-aware AI assistant
+
+Build an AI assistant that understands canvas context:
+
+```tsx
+import { Editor, useEditor } from 'tldraw'
+import { useState } from 'react'
+
+function AIAssistant() {
+  const editor = useEditor()
+  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([])
+  const [input, setInput] = useState('')
+
+  const sendMessage = async () => {
+    if (!input.trim()) return
+
+    const userMessage = { role: 'user', content: input }
+    setMessages([...messages, userMessage])
+    setInput('')
+
+    // Get canvas context
+    const context = {
+      shapes: editor.getCurrentPageShapes().map(s => ({
+        type: s.type,
+        props: s.props,
+      })),
+      selectedShapes: editor.getSelectedShapes().map(s => s.type),
+      viewport: editor.getViewportScreenBounds(),
+    }
+
+    // Call AI with context
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [...messages, userMessage],
+        context,
+      }),
+    })
+
+    const { reply, actions } = await response.json()
+
+    setMessages([...messages, userMessage, { role: 'assistant', content: reply }])
+
+    // Execute any suggested actions
+    if (actions) {
+      executeActions(editor, actions)
+    }
+  }
+
+  return (
+    <div className="ai-assistant">
+      <div className="messages">
+        {messages.map((msg, i) => (
+          <div key={i} className={`message ${msg.role}`}>
+            {msg.content}
+          </div>
+        ))}
+      </div>
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+        placeholder="Ask the AI assistant..."
+      />
+    </div>
+  )
+}
+
+function executeActions(editor: Editor, actions: any[]) {
+  actions.forEach(action => {
+    switch (action.type) {
+      case 'create':
+        editor.createShape(action.shape)
+        break
+      case 'update':
+        editor.updateShape(action.changes)
+        break
+      case 'delete':
+        editor.deleteShapes(action.ids)
+        break
+      case 'select':
+        editor.select(...action.ids)
+        break
+    }
+  })
+}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Provide loading states">
+    AI operations can be slow. Always show loading indicators:
+    
+    ```tsx
+    const [isGenerating, setIsGenerating] = useState(false)
+    
+    <button disabled={isGenerating}>
+      {isGenerating ? 'Generating...' : 'Generate'}
+    </button>
+    ```
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    AI services can fail. Provide fallbacks:
+    
+    ```tsx
+    try {
+      const result = await aiService.generate(prompt)
+      createShapes(result)
+    } catch (error) {
+      console.error('AI generation failed:', error)
+      alert('Generation failed. Please try again.')
+      // Optionally fall back to manual creation
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Allow user override">
+    Let users modify AI-generated content:
+    
+    ```tsx
+    // Make AI suggestions editable
+    const shapes = await generateShapes(prompt)
+    editor.createShapes(shapes)
+    editor.select(...shapes.map(s => s.id))
+    // User can now modify the selected shapes
+    ```
+  </Accordion>
+
+  <Accordion title="Provide context to AI">
+    Better results with more context:
+    
+    ```tsx
+    const context = {
+      existingShapes: editor.getCurrentPageShapes(),
+      canvasSize: editor.getViewportScreenBounds(),
+      userPreferences: getUserPreferences(),
+    }
+    
+    await aiService.generate(prompt, context)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Complete AI diagram builder
+
+```tsx
+import { useState } from 'react'
+import { Tldraw, useEditor, track } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const AIDiagramBuilder = track(() => {
+  const editor = useEditor()
+  const [prompt, setPrompt] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleGenerate = async () => {
+    setIsLoading(true)
+
+    try {
+      // Call your AI service
+      const response = await fetch('/api/ai/generate-diagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt,
+          canvasContext: {
+            existingShapes: editor.getCurrentPageShapes().length,
+            viewport: editor.getViewportScreenBounds(),
+          }
+        }),
+      })
+
+      const { shapes, arrows } = await response.json()
+
+      // Create shapes
+      editor.createShapes([...shapes, ...arrows])
+      
+      // Select and zoom
+      const newIds = [...shapes, ...arrows].map(s => s.id)
+      editor.select(...newIds)
+      editor.zoomToSelection()
+    } catch (error) {
+      console.error('Generation failed:', error)
+      alert('Failed to generate diagram. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000 }}>
+      <div style={{ background: 'white', padding: 16, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Describe your diagram (e.g., 'create a login flow diagram')..."
+          rows={3}
+          style={{ width: 300, marginBottom: 8 }}
+        />
+        <button 
+          onClick={handleGenerate} 
+          disabled={isLoading || !prompt.trim()}
+          style={{ width: '100%' }}
+        >
+          {isLoading ? 'Generating...' : 'Generate Diagram'}
+        </button>
+      </div>
+    </div>
+  )
+})
+
+export default function App() {
+  return (
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <Tldraw>
+        <AIDiagramBuilder />
+      </Tldraw>
+    </div>
+  )
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom shapes" icon="shapes" href="/guides/custom-shapes">
+    Create custom shapes for AI-generated content
+  </Card>
+  <Card title="Events and side effects" icon="bolt" href="/guides/events-and-side-effects">
+    React to AI-generated changes
+  </Card>
+  <Card title="Persistence" icon="database" href="/guides/persistence">
+    Save AI-generated diagrams
+  </Card>
+</CardGroup>

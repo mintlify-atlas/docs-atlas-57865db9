@@ -1,0 +1,296 @@
+---
+title: Quick start for multiplayer
+description: Get real-time collaboration working in 5 minutes
+---
+
+# Quick start for multiplayer
+
+Get tldraw multiplayer running quickly using the demo server. Perfect for prototyping and testing.
+
+<Warning>
+  The demo server at `demo.tldraw.xyz` is for testing only. Data is deleted after 24 hours and rooms are publicly accessible. Use your own server for production.
+</Warning>
+
+## Installation
+
+Install the sync package:
+
+<CodeGroup>
+```bash npm
+npm install @tldraw/sync tldraw
+```
+
+```bash yarn
+yarn add @tldraw/sync tldraw
+```
+
+```bash pnpm
+pnpm add @tldraw/sync tldraw
+```
+</CodeGroup>
+
+## Using the demo server
+
+The fastest way to get multiplayer working is with `useSyncDemo`:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+import 'tldraw/tldraw.css'
+
+function MyApp() {
+  const store = useSyncDemo({ roomId: 'my-test-room' })
+  return <Tldraw store={store} />
+}
+```
+
+<Steps>
+  <Step title="Import the hook">
+    Import `useSyncDemo` from `@tldraw/sync`
+  </Step>
+  
+  <Step title="Create a store">
+    Call `useSyncDemo` with a unique room ID
+  </Step>
+  
+  <Step title="Pass to Tldraw">
+    Pass the returned store to the `<Tldraw>` component
+  </Step>
+</Steps>
+
+That's it! Open the same URL in multiple tabs to see real-time collaboration.
+
+## Room IDs
+
+Choose room IDs carefully:
+
+<CodeGroup>
+```tsx Good
+// Use company/project prefix
+useSyncDemo({ roomId: 'acme-design-review-2024' })
+
+// Or generate UUIDs for privacy
+import { nanoid } from 'nanoid'
+useSyncDemo({ roomId: `acme-${nanoid()}` })
+```
+
+```tsx Bad
+// Too generic - collision risk!
+useSyncDemo({ roomId: 'room1' })
+
+// Predictable - privacy risk!
+useSyncDemo({ roomId: 'meeting' })
+```
+</CodeGroup>
+
+## Adding user information
+
+Show user names and colors in presence:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+
+function MyApp() {
+  const store = useSyncDemo({
+    roomId: 'my-test-room',
+    userInfo: {
+      id: 'user-123',
+      name: 'Alice',
+      color: '#ff0000'
+    }
+  })
+  
+  return (
+    <Tldraw 
+      store={store}
+      // Keep user info in sync
+      userPreferences={{
+        id: 'user-123',
+        name: 'Alice',
+        color: '#ff0000'
+      }}
+    />
+  )
+}
+```
+
+## Handling connection states
+
+Show loading and error states:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+
+function MyApp() {
+  const store = useSyncDemo({ roomId: 'my-test-room' })
+  
+  if (store.status === 'loading') {
+    return (
+      <div className="loading">
+        <div>Connecting to multiplayer session...</div>
+      </div>
+    )
+  }
+  
+  if (store.status === 'error') {
+    return (
+      <div className="error">
+        <div>Failed to connect: {store.error.message}</div>
+        <button onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+  
+  // store.status === 'synced-remote'
+  return <Tldraw store={store} />
+}
+```
+
+## Connection status indicator
+
+Show online/offline status:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+
+function MyApp() {
+  const store = useSyncDemo({ roomId: 'my-test-room' })
+  
+  if (store.status !== 'synced-remote') {
+    return <div>Loading...</div>
+  }
+  
+  return (
+    <div style={{ position: 'relative', height: '100vh' }}>
+      <Tldraw store={store.store} />
+      
+      <div style={{ position: 'absolute', top: 10, right: 10 }}>
+        {store.connectionStatus === 'online' && (
+          <span style={{ color: 'green' }}>● Connected</span>
+        )}
+        {store.connectionStatus === 'offline' && (
+          <span style={{ color: 'orange' }}>● Reconnecting...</span>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+## Complete example
+
+Here's a full example with all features:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+import { useState } from 'react'
+import 'tldraw/tldraw.css'
+
+function CollaborativeEditor() {
+  const [roomId] = useState(() => {
+    // Get room ID from URL or create new one
+    const params = new URLSearchParams(window.location.search)
+    return params.get('room') || `my-app-${Date.now()}`
+  })
+  
+  const store = useSyncDemo({
+    roomId,
+    userInfo: {
+      id: 'user-' + Math.random(),
+      name: 'User ' + Math.floor(Math.random() * 100),
+      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    }
+  })
+  
+  if (store.status === 'loading') {
+    return <div className="loading">Connecting...</div>
+  }
+  
+  if (store.status === 'error') {
+    return (
+      <div className="error">
+        <h2>Connection Error</h2>
+        <p>{store.error.message}</p>
+        <button onClick={() => window.location.reload()}>Retry</button>
+      </div>
+    )
+  }
+  
+  return (
+    <div style={{ position: 'relative', inset: 0 }}>
+      <Tldraw store={store.store} />
+      
+      <div style={{ position: 'absolute', top: 8, right: 8 }}>
+        <ConnectionIndicator status={store.connectionStatus} />
+        <ShareLink roomId={roomId} />
+      </div>
+    </div>
+  )
+}
+
+function ConnectionIndicator({ status }: { status: string }) {
+  return (
+    <div style={{
+      padding: '4px 8px',
+      borderRadius: 4,
+      backgroundColor: status === 'online' ? '#e7f7ed' : '#fff3cd',
+      color: status === 'online' ? '#0f5132' : '#856404',
+      fontSize: 12,
+      marginBottom: 8
+    }}>
+      {status === 'online' ? '● Online' : '○ Reconnecting...'}
+    </div>
+  )
+}
+
+function ShareLink({ roomId }: { roomId: string }) {
+  const url = `${window.location.origin}${window.location.pathname}?room=${roomId}`
+  
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(url)
+        alert('Link copied to clipboard!')
+      }}
+      style={{
+        padding: '4px 8px',
+        borderRadius: 4,
+        border: '1px solid #ccc',
+        background: 'white',
+        cursor: 'pointer',
+        fontSize: 12
+      }}
+    >
+      Share Link
+    </button>
+  )
+}
+
+export default CollaborativeEditor
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Setup guide" icon="wrench" href="/sync/setup">
+    Learn about production setup with your own server
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/sync/authentication">
+    Add authentication to your multiplayer rooms
+  </Card>
+  
+  <Card title="Deployment" icon="server" href="/sync/deployment">
+    Deploy your own sync server
+  </Card>
+  
+  <Card title="Customization" icon="palette" href="/sync/customization">
+    Customize presence and sync behavior
+  </Card>
+</CardGroup>

@@ -1,0 +1,241 @@
+---
+title: DrawShapeUtil
+description: Shape utility for freehand drawing and pen strokes
+---
+
+`DrawShapeUtil` handles freehand drawing shapes created with the draw tool, supporting both pen and mouse input with configurable stroke smoothing.
+
+## Type signature
+
+```typescript
+class DrawShapeUtil extends ShapeUtil<TLDrawShape>
+```
+
+## Features
+
+- Freehand drawing with pressure sensitivity
+- Pen vs mouse input handling
+- Closed/filled shapes
+- Multiple segments for long drawings
+- Draw-style strokes with natural variation
+- Automatic simplification
+
+## Configuration options
+
+```typescript
+interface DrawShapeOptions {
+  /**
+   * The maximum number of points in a line before the draw tool will begin a new shape.
+   * A higher number will lead to poor performance while drawing very long lines.
+   */
+  readonly maxPointsPerShape: number // default: 600
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLDrawShape['props'] {
+  return {
+    segments: [],
+    color: 'black',
+    fill: 'none',
+    dash: 'draw',
+    size: 'm',
+    isComplete: false,
+    isClosed: false,
+    isPen: false,
+    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
+  }
+}
+```
+
+## Properties
+
+<ParamField path="segments" type="TLDrawShapeSegment[]" required>
+  Array of drawing segments. Each segment contains encoded points.
+</ParamField>
+
+<ParamField path="isComplete" type="boolean" default="false">
+  Whether the drawing is complete (user finished drawing).
+</ParamField>
+
+<ParamField path="isClosed" type="boolean" default="false">
+  Whether the shape is a closed loop that can be filled.
+</ParamField>
+
+<ParamField path="isPen" type="boolean" default="false">
+  Whether the shape was drawn with a pen (affects smoothing).
+</ParamField>
+
+<ParamField path="scale" type="number" default="1">
+  Overall scale of the shape.
+</ParamField>
+
+<ParamField path="scaleX" type="number" default="1">
+  Horizontal scale factor from resizing.
+</ParamField>
+
+<ParamField path="scaleY" type="number" default="1">
+  Vertical scale factor from resizing.
+</ParamField>
+
+## Geometry
+
+Draw shapes have different geometry based on their characteristics:
+
+### Single point (dot)
+```typescript
+new Circle2d({
+  x: -sw,
+  y: -sw,
+  radius: sw,
+  isFilled: true,
+})
+```
+
+### Closed shape
+```typescript
+new Polygon2d({
+  points: strokePoints,
+  isFilled: shape.props.fill !== 'none',
+})
+```
+
+### Open path
+```typescript
+new Polyline2d({
+  points: strokePoints,
+})
+```
+
+## Methods
+
+### getGeometry()
+
+Returns appropriate geometry (Circle2d for dots, Polygon2d for closed shapes, Polyline2d for open strokes).
+
+### hideResizeHandles()
+
+```typescript
+hideResizeHandles(shape: TLDrawShape): boolean {
+  return getIsDot(shape)
+}
+```
+
+Hides resize handles for single-point dots.
+
+### hideRotateHandle()
+
+```typescript
+hideRotateHandle(shape: TLDrawShape): boolean {
+  return getIsDot(shape)
+}
+```
+
+Hides rotation handle for dots.
+
+### onResize()
+
+Updates `scaleX` and `scaleY` properties based on resize:
+
+```typescript
+onResize(shape: TLDrawShape, info: TLResizeInfo<TLDrawShape>) {
+  const newScaleX = info.scaleX * shape.props.scaleX
+  const newScaleY = info.scaleY * shape.props.scaleY
+  if (newScaleX === 0 || newScaleY === 0) return
+
+  return {
+    props: {
+      scaleX: newScaleX,
+      scaleY: newScaleY,
+    },
+  }
+}
+```
+
+### expandSelectionOutlinePx()
+
+Expands selection outline to account for stroke width:
+
+```typescript
+expandSelectionOutlinePx(shape: TLDrawShape): number {
+  const multiplier = shape.props.dash === 'draw' ? 1.6 : 1
+  return ((STROKE_SIZES[shape.props.size] * multiplier) / 2) * shape.props.scale
+}
+```
+
+## Indicator
+
+Uses canvas-based indicator for better performance:
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLDrawShape): Path2D {
+  const strokePoints = getStrokePoints(allPointsFromSegments, options)
+  const solidStrokePath =
+    strokePoints.length > 1
+      ? getSvgPathFromStrokePoints(strokePoints, shape.props.isClosed)
+      : getDot(allPointsFromSegments[0], sw)
+
+  return new Path2D(solidStrokePath)
+}
+```
+
+## Export
+
+### toSvg()
+
+Exports the draw shape as SVG with proper scaling:
+
+```typescript
+toSvg(shape: TLDrawShape, ctx: SvgExportContext) {
+  ctx.addExportDef(getFillDefForExport(shape.props.fill))
+  const scaleFactor = 1 / shape.props.scale
+  return (
+    <g transform={`scale(${scaleFactor})`}>
+      <DrawShapeSvg shape={shape} zoomOverride={1} />
+    </g>
+  )
+}
+```
+
+## Stroke rendering
+
+Draw shapes use the `perfect-freehand` algorithm for natural-looking strokes:
+
+- Pen input: Less smoothing for precise control
+- Mouse input: More smoothing for cleaner lines
+- Draw dash style: Ink-like variation
+- Other dash styles: Solid stroke with dash array
+
+## Example: Configure draw options
+
+```typescript
+import { DrawShapeUtil } from 'tldraw'
+
+const CustomDrawUtil = DrawShapeUtil.configure({
+  maxPointsPerShape: 1000, // Allow longer drawings
+})
+```
+
+## Example: Working with draw shapes
+
+```typescript
+// Check if a draw shape is just a dot
+function isDot(shape: TLDrawShape): boolean {
+  return shape.props.segments.length === 1 && 
+         shape.props.segments[0].path.length < 24
+}
+
+// Get all draw shapes that are closed
+const closedDrawings = editor.getCurrentPageShapes()
+  .filter((s): s is TLDrawShape => 
+    s.type === 'draw' && s.props.isClosed
+  )
+```

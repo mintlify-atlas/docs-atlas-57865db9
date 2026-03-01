@@ -1,0 +1,332 @@
+---
+title: GeoShapeUtil
+description: Shape utility for geometric shapes like rectangles, ellipses, and polygons
+---
+
+`GeoShapeUtil` handles geometric shapes including rectangles, ellipses, triangles, stars, and more, with support for rich text labels.
+
+## Type signature
+
+```typescript
+class GeoShapeUtil extends BaseBoxShapeUtil<TLGeoShape>
+```
+
+## Features
+
+- 17+ geometric shapes
+- Rich text labels with auto-sizing
+- Vertical text growth (growY)
+- Configurable alignment
+- Fill patterns and colors
+- Optional URLs for linking
+
+## Configuration options
+
+```typescript
+interface GeoShapeOptions {
+  showTextOutline: boolean // default: true
+}
+```
+
+## Default props
+
+```typescript
+getDefaultProps(): TLGeoShape['props'] {
+  return {
+    w: 100,
+    h: 100,
+    geo: 'rectangle',
+    dash: 'draw',
+    growY: 0,
+    url: '',
+    scale: 1,
+    color: 'black',
+    labelColor: 'black',
+    fill: 'none',
+    size: 'm',
+    font: 'draw',
+    align: 'middle',
+    verticalAlign: 'middle',
+    richText: toRichText(''),
+  }
+}
+```
+
+## Properties
+
+<ParamField path="geo" type="TLGeoType" required>
+  The geometric shape type:
+  - `'rectangle'`
+  - `'ellipse'`
+  - `'triangle'`
+  - `'diamond'`
+  - `'pentagon'`
+  - `'hexagon'`
+  - `'octagon'`
+  - `'star'`
+  - `'rhombus'`
+  - `'rhombus-2'`
+  - `'oval'`
+  - `'trapezoid'`
+  - `'arrow-right'`
+  - `'arrow-left'`
+  - `'arrow-up'`
+  - `'arrow-down'`
+  - `'x-box'`
+  - `'check-box'`
+  - `'cloud'`
+  - `'heart'`
+</ParamField>
+
+<ParamField path="w" type="number" required>
+  Width of the shape.
+</ParamField>
+
+<ParamField path="h" type="number" required>
+  Height of the shape.
+</ParamField>
+
+<ParamField path="growY" type="number" default="0">
+  Additional vertical space added when text overflows.
+</ParamField>
+
+<ParamField path="richText" type="TLRichText">
+  Rich text content for the label.
+</ParamField>
+
+<ParamField path="align" type="'start' | 'middle' | 'end'" default="'middle'">
+  Horizontal text alignment.
+</ParamField>
+
+<ParamField path="verticalAlign" type="'start' | 'middle' | 'end'" default="'middle'">
+  Vertical text alignment.
+</ParamField>
+
+<ParamField path="url" type="string" default="''">
+  Optional URL for hyperlink.
+</ParamField>
+
+<ParamField path="scale" type="number" default="1">
+  Scale factor for the shape.
+</ParamField>
+
+## Geometry
+
+Geo shapes have composite geometry including the shape outline and label area:
+
+```typescript
+getGeometry(shape: TLGeoShape) {
+  const path = getGeoShapePath(shape)
+  const pathGeometry = path.toGeometry()
+  
+  const labelBounds = getLabelBounds(/* ... */)
+  
+  return new Group2d({
+    children: [
+      pathGeometry,
+      new Rectangle2d({
+        ...labelBounds,
+        isFilled: true,
+        isLabel: true,
+        excludeFromShapeBounds: true,
+        isEmptyLabel: isEmptyRichText(props.richText),
+      }),
+    ],
+  })
+}
+```
+
+## Methods
+
+### canEdit()
+
+```typescript
+canEdit() {
+  return true
+}
+```
+
+Geo shapes can be double-clicked to edit text.
+
+### getText()
+
+Returns plaintext version of the rich text label:
+
+```typescript
+getText(shape: TLGeoShape) {
+  return renderPlaintextFromRichText(this.editor, shape.props.richText)
+}
+```
+
+### getHandleSnapGeometry()
+
+Returns appropriate snap points based on geo type:
+
+```typescript
+getHandleSnapGeometry(shape: TLGeoShape): HandleSnapGeometry {
+  const geometry = this.getGeometry(shape)
+  const outline = geometry.children[0]
+  
+  switch (shape.props.geo) {
+    case 'rectangle':
+    case 'diamond':
+    case 'hexagon':
+      // Polygons: snap to vertices + center
+      return {
+        outline: outline,
+        points: [...outline.vertices, geometry.bounds.center]
+      }
+    
+    case 'ellipse':
+    case 'cloud':
+      // Curved shapes: snap to center only
+      return {
+        outline: outline,
+        points: [geometry.bounds.center]
+      }
+  }
+}
+```
+
+### onResize()
+
+Handles resizing with label size constraints:
+
+```typescript
+onResize(
+  shape: TLGeoShape,
+  { handle, newPoint, scaleX, scaleY, initialShape }: TLResizeInfo<TLGeoShape>
+) {
+  // Calculate new dimensions
+  let unscaledW = unscaledInitial.w * scaleX
+  let unscaledH = (unscaledInitial.h + unscaledInitial.growY) * scaleY
+  
+  // If shape has text, ensure it doesn't shrink below label size
+  if (!isEmptyRichText(shape.props.richText)) {
+    const unscaledLabelSize = measureUnscaledLabelSize(this.editor, shape)
+    const constrainedW = Math.max(absUnscaledW, unscaledLabelSize.w)
+    const constrainedH = Math.max(absUnscaledH, unscaledLabelSize.h)
+    // ... apply constraints
+  }
+  
+  return { x, y, props: { w, h, growY: 0 } }
+}
+```
+
+### onBeforeCreate()
+
+Ensures label fits when creating:
+
+```typescript
+onBeforeCreate(shape: TLGeoShape) {
+  if (isEmptyRichText(props.richText)) {
+    return props.growY !== 0 ? { ...shape, props: { ...props, growY: 0 } } : undefined
+  }
+  
+  const unscaledGrowY = calculateGrowY(unscaledShapeH, unscaledLabelH, props.growY / props.scale)
+  
+  if (unscaledGrowY !== null) {
+    return { ...shape, props: { ...props, growY: unscaledGrowY * props.scale } }
+  }
+}
+```
+
+### onBeforeUpdate()
+
+Adjusts dimensions when text changes:
+
+```typescript
+onBeforeUpdate(prev: TLGeoShape, next: TLGeoShape) {
+  // Skip if text unchanged
+  if (isEqual(prev.props.richText, next.props.richText) &&
+      prev.props.font === next.props.font &&
+      prev.props.size === next.props.size) {
+    return undefined
+  }
+  
+  const isEmpty = isEmptyRichText(next.props.richText)
+  
+  if (isEmpty) {
+    return next.props.growY !== 0 ? { ...next, props: { ...next.props, growY: 0 } } : undefined
+  }
+  
+  // Measure label and adjust dimensions
+  const unscaledLabelSize = getUnscaledLabelSize(this.editor, next)
+  // ... calculate new w, h, growY
+}
+```
+
+### onDoubleClick()
+
+Easter egg: Alt + double-click toggles rectangle ↔ checkbox:
+
+```typescript
+onDoubleClick(shape: TLGeoShape) {
+  if (this.editor.inputs.getAltKey()) {
+    switch (shape.props.geo) {
+      case 'rectangle':
+        return { ...shape, props: { geo: 'check-box' as const } }
+      case 'check-box':
+        return { ...shape, props: { geo: 'rectangle' as const } }
+    }
+  }
+}
+```
+
+## Indicator
+
+Uses canvas-based rendering:
+
+```typescript
+useLegacyIndicator() {
+  return false
+}
+
+getIndicatorPath(shape: TLGeoShape): Path2D | undefined {
+  const path = getGeoShapePath(shape)
+  return path.toPath2D({
+    style: dash === 'draw' ? 'draw' : 'solid',
+    strokeWidth: 1,
+    // ...
+  })
+}
+```
+
+## Example: Create geo shapes
+
+```typescript
+// Create a triangle
+editor.createShape({
+  type: 'geo',
+  props: {
+    geo: 'triangle',
+    w: 100,
+    h: 100,
+    fill: 'solid',
+    color: 'blue',
+  }
+})
+
+// Create a star with text
+editor.createShape({
+  type: 'geo',
+  props: {
+    geo: 'star',
+    w: 150,
+    h: 150,
+    richText: toRichText('Important!'),
+    color: 'yellow',
+    fill: 'pattern',
+  }
+})
+```
+
+## Example: Custom configuration
+
+```typescript
+import { GeoShapeUtil } from 'tldraw'
+
+const CustomGeoUtil = GeoShapeUtil.configure({
+  showTextOutline: false,
+})
+```

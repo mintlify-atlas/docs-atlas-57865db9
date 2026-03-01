@@ -1,0 +1,505 @@
+---
+title: Custom tools
+description: Learn how to create custom tools with the tldraw SDK
+---
+
+Tools in tldraw are state machines that handle user input. Create custom tools to add new interactions and behaviors to your editor.
+
+## Overview
+
+Tools are implemented as `StateNode` classes that respond to user events like pointer clicks, drags, and keyboard input. Tools can have simple single-state behavior or complex multi-state interactions.
+
+## Simple tool
+
+Create a basic tool that responds to clicks:
+
+<Steps>
+  <Step title="Create the StateNode class">
+    ```typescript
+    import { StateNode, Tldraw, toRichText } from 'tldraw'
+
+    class StickerTool extends StateNode {
+      static override id = 'sticker'
+
+      override onEnter() {
+        this.editor.setCursor({ type: 'cross', rotation: 0 })
+      }
+
+      override onPointerDown() {
+        const currentPagePoint = this.editor.inputs.getCurrentPagePoint()
+        this.editor.createShape({
+          type: 'text',
+          x: currentPagePoint.x - 12,
+          y: currentPagePoint.y - 12,
+          props: { richText: toRichText('❤️') },
+        })
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Register the tool">
+    Pass the tool to the Tldraw component:
+
+    ```tsx
+    const customTools = [StickerTool]
+
+    export default function MyApp() {
+      return (
+        <Tldraw
+          tools={customTools}
+          initialState="sticker"
+        />
+      )
+    }
+    ```
+  </Step>
+</Steps>
+
+## Tool lifecycle
+
+Tools have several lifecycle methods:
+
+```typescript
+class MyTool extends StateNode {
+  static override id = 'my-tool'
+
+  // Called when the tool becomes active
+  override onEnter() {
+    this.editor.setCursor({ type: 'cross', rotation: 0 })
+  }
+
+  // Called when switching to another tool
+  override onExit() {
+    this.editor.setCursor({ type: 'default', rotation: 0 })
+  }
+
+  // Called when the tool is interrupted (e.g., by pressing Escape)
+  override onInterrupt() {
+    this.cleanup()
+  }
+
+  // Called when the user cancels (e.g., right-click or Escape)
+  override onCancel() {
+    this.cleanup()
+  }
+
+  private cleanup() {
+    // Cleanup logic
+    this.parent.transition('select', {})
+  }
+}
+```
+
+## Pointer events
+
+Handle mouse and touch input:
+
+```typescript
+class DrawingTool extends StateNode {
+  static override id = 'drawing'
+  
+  override onPointerDown() {
+    const { currentPagePoint } = this.editor.inputs
+    // Start drawing at this point
+  }
+
+  override onPointerMove() {
+    const { currentPagePoint } = this.editor.inputs
+    // Update drawing as pointer moves
+  }
+
+  override onPointerUp() {
+    // Finish drawing
+    this.parent.transition('select', {})
+  }
+
+  override onDoubleClick() {
+    // Handle double-click
+  }
+
+  override onTripleClick() {
+    // Handle triple-click
+  }
+
+  override onQuadrupleClick() {
+    // Handle quadruple-click
+  }
+}
+```
+
+## Keyboard events
+
+Respond to keyboard input:
+
+```typescript
+class KeyboardTool extends StateNode {
+  static override id = 'keyboard-tool'
+
+  override onKeyDown() {
+    switch (this.editor.inputs.currentKey) {
+      case 'Escape':
+        this.parent.transition('select', {})
+        break
+      case 'Enter':
+        this.confirmAction()
+        break
+    }
+  }
+
+  override onKeyUp() {
+    // Handle key release
+  }
+
+  override onKeyRepeat() {
+    // Handle key held down
+  }
+}
+```
+
+## Multi-state tools
+
+Complex tools use child states to manage different interaction phases:
+
+<Steps>
+  <Step title="Create the parent tool">
+    ```typescript
+    import { StateNode } from 'tldraw'
+    import { ScreenshotIdle } from './ScreenshotIdle'
+    import { ScreenshotPointing } from './ScreenshotPointing'
+    import { ScreenshotDragging } from './ScreenshotDragging'
+
+    export class ScreenshotTool extends StateNode {
+      static override id = 'screenshot'
+      static override initial = 'idle'
+      
+      static override children() {
+        return [ScreenshotIdle, ScreenshotPointing, ScreenshotDragging]
+      }
+
+      override onEnter() {
+        this.editor.setCursor({ type: 'cross', rotation: 0 })
+      }
+
+      override onExit() {
+        this.editor.setCursor({ type: 'default', rotation: 0 })
+      }
+
+      override onInterrupt() {
+        this.complete()
+      }
+
+      override onCancel() {
+        this.complete()
+      }
+
+      private complete() {
+        this.parent.transition('select', {})
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Create child states">
+    **Idle state** (waiting for input):
+    ```typescript
+    import { StateNode } from 'tldraw'
+
+    export class ScreenshotIdle extends StateNode {
+      static override id = 'idle'
+
+      override onPointerDown() {
+        this.parent.transition('pointing', {})
+      }
+    }
+    ```
+
+    **Pointing state** (mouse down, not dragging yet):
+    ```typescript
+    export class ScreenshotPointing extends StateNode {
+      static override id = 'pointing'
+
+      override onPointerMove() {
+        if (this.editor.inputs.isDragging) {
+          this.parent.transition('dragging', {})
+        }
+      }
+
+      override onPointerUp() {
+        this.parent.transition('idle', {})
+      }
+    }
+    ```
+
+    **Dragging state** (actively dragging):
+    ```typescript
+    export class ScreenshotDragging extends StateNode {
+      static override id = 'dragging'
+
+      override onPointerMove() {
+        // Update drag selection
+      }
+
+      override onPointerUp() {
+        this.captureScreenshot()
+        this.parent.transition('idle', {})
+      }
+
+      private captureScreenshot() {
+        // Take screenshot of selected area
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use `this.parent.transition(stateName, info)` to move between child states.
+</Tip>
+
+## Accessing editor state
+
+Tools have full access to the editor instance:
+
+```typescript
+class MyTool extends StateNode {
+  override onPointerDown() {
+    // Get pointer position
+    const point = this.editor.inputs.getCurrentPagePoint()
+    const screenPoint = this.editor.inputs.currentScreenPoint
+
+    // Check input state
+    const isDragging = this.editor.inputs.isDragging
+    const isShiftPressed = this.editor.inputs.shiftKey
+    const isAltPressed = this.editor.inputs.altKey
+    const isCtrlPressed = this.editor.inputs.ctrlKey
+
+    // Get selected shapes
+    const selectedShapes = this.editor.getSelectedShapes()
+    const selectedIds = this.editor.getSelectedShapeIds()
+
+    // Create shapes
+    this.editor.createShape({ type: 'text', x: point.x, y: point.y })
+
+    // Update shapes
+    this.editor.updateShape({ id: shapeId, type: 'text', props: { ... } })
+
+    // Delete shapes
+    this.editor.deleteShapes([shapeId])
+  }
+}
+```
+
+## Adding tools to the toolbar
+
+Make your tool accessible via the UI:
+
+```tsx
+import { Tldraw, useTools, TldrawUiMenuItem } from 'tldraw'
+
+const customTools = [StickerTool]
+
+function CustomToolbar() {
+  const tools = useTools()
+  
+  return (
+    <div className="custom-toolbar">
+      <TldrawUiMenuItem
+        {...tools['sticker']}
+        icon="heart"
+        label="Sticker"
+      />
+    </div>
+  )
+}
+
+export default function MyApp() {
+  return (
+    <Tldraw
+      tools={customTools}
+      components={{ Toolbar: CustomToolbar }}
+    />
+  )
+}
+```
+
+## Tool with custom shapes
+
+Combine tools with custom shapes:
+
+```typescript
+import { BaseBoxShapeTool } from 'tldraw'
+
+// Define the shape util
+class CounterShapeUtil extends BaseBoxShapeUtil<CounterShape> {
+  static override type = 'counter'
+  // ... shape implementation
+}
+
+// Create a tool for the shape
+class CounterShapeTool extends BaseBoxShapeTool {
+  static override id = 'counter'
+  override shapeType = 'counter' as const
+}
+
+// Register both
+const customShapeUtils = [CounterShapeUtil]
+const customTools = [CounterShapeTool]
+
+<Tldraw shapeUtils={customShapeUtils} tools={customTools} />
+```
+
+<Note>
+  `BaseBoxShapeTool` automatically handles the drag-to-create interaction for box-shaped tools.
+</Note>
+
+## Animation and tick events
+
+Run code on every frame:
+
+```typescript
+class AnimatedTool extends StateNode {
+  static override id = 'animated-tool'
+  private frameCount = 0
+
+  override onTick() {
+    // Called every frame while the tool is active
+    this.frameCount++
+    
+    // Update something based on time
+    const time = Date.now()
+    this.updateAnimation(time)
+  }
+
+  private updateAnimation(time: number) {
+    // Animation logic
+  }
+}
+```
+
+## Tool configuration
+
+Customize tool behavior:
+
+```typescript
+class ConfigurableTool extends StateNode {
+  static override id = 'configurable'
+  
+  // Custom config
+  private config = {
+    snapToGrid: true,
+    gridSize: 20,
+    color: '#ff0000',
+  }
+
+  override onPointerDown() {
+    const point = this.editor.inputs.getCurrentPagePoint()
+    
+    if (this.config.snapToGrid) {
+      point.x = Math.round(point.x / this.config.gridSize) * this.config.gridSize
+      point.y = Math.round(point.y / this.config.gridSize) * this.config.gridSize
+    }
+
+    this.editor.createShape({
+      type: 'geo',
+      x: point.x,
+      y: point.y,
+      props: { color: this.config.color },
+    })
+  }
+}
+```
+
+## Common patterns
+
+<AccordionGroup>
+  <Accordion title="Click to create">
+    ```typescript
+    class ClickCreateTool extends StateNode {
+      static override id = 'click-create'
+
+      override onPointerDown() {
+        const point = this.editor.inputs.getCurrentPagePoint()
+        this.editor.createShape({
+          type: 'my-shape',
+          x: point.x,
+          y: point.y,
+        })
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Drag to create">
+    Use `BaseBoxShapeTool` for automatic drag-to-create:
+    ```typescript
+    class DragCreateTool extends BaseBoxShapeTool {
+      static override id = 'drag-create'
+      override shapeType = 'my-box-shape' as const
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Multi-click creation">
+    ```typescript
+    class MultiClickTool extends StateNode {
+      static override id = 'multi-click'
+      private points: { x: number; y: number }[] = []
+
+      override onPointerDown() {
+        const point = this.editor.inputs.getCurrentPagePoint()
+        this.points.push(point)
+
+        if (this.points.length >= 3) {
+          this.createPolygon()
+          this.points = []
+        }
+      }
+
+      override onKeyDown() {
+        if (this.editor.inputs.currentKey === 'Escape') {
+          this.points = []
+        }
+      }
+
+      private createPolygon() {
+        this.editor.createShape({
+          type: 'polygon',
+          props: { points: this.points },
+        })
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Clean up on exit" icon="broom">
+    Always reset state and clear temporary data in `onExit` or `onCancel`
+  </Card>
+  <Card title="Handle interruptions" icon="hand">
+    Implement `onInterrupt` to gracefully handle tool cancellation
+  </Card>
+  <Card title="Provide visual feedback" icon="eye">
+    Update the cursor and provide visual indicators of tool state
+  </Card>
+  <Card title="Keep state minimal" icon="minimize">
+    Store only essential state in the tool; use the editor for shape data
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom shapes" icon="shapes" href="/guides/custom-shapes">
+    Create shapes to use with your tools
+  </Card>
+  <Card title="Custom UI" icon="palette" href="/guides/custom-ui">
+    Add your tools to the tldraw UI
+  </Card>
+  <Card title="Events and side effects" icon="bolt" href="/guides/events-and-side-effects">
+    React to tool interactions
+  </Card>
+</CardGroup>

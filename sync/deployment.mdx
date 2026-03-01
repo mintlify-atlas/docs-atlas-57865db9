@@ -1,0 +1,467 @@
+---
+title: Deployment guide
+description: Deploy your multiplayer sync server to production
+---
+
+# Deployment guide
+
+Learn how to deploy tldraw's multiplayer sync server to various hosting platforms for production use.
+
+## Deployment options
+
+Choose a deployment platform based on your requirements:
+
+| Platform | Best for | Complexity | Storage |
+|----------|----------|------------|----------|
+| **Cloudflare Workers** | Global scale, low latency | Medium | Durable Objects (SQLite) |
+| **Railway** | Quick deployment | Low | PostgreSQL |
+| **AWS** | Enterprise scale | High | RDS, S3 |
+| **DigitalOcean** | Simplicity, control | Medium | Managed PostgreSQL |
+| **Self-hosted** | Full control | High | Your choice |
+
+## Cloudflare Workers + Durable Objects
+
+Cloudflare Workers provide global edge deployment with built-in SQLite storage.
+
+### Setup
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    npm install @tldraw/sync-core @tldraw/tlschema
+    npm install -D @cloudflare/workers-types wrangler
+    ```
+  </Step>
+  
+  <Step title="Create Durable Object">
+    ```ts
+    // src/RoomDurableObject.ts
+    import { DurableObject } from 'cloudflare:workers'
+    import { 
+      TLSocketRoom,
+      SQLiteSyncStorage,
+      DurableObjectSqliteSyncWrapper
+    } from '@tldraw/sync-core'
+    import { createTLSchema } from '@tldraw/tlschema'
+    
+    export class RoomDurableObject extends DurableObject {
+      private room: TLSocketRoom | null = null
+      
+      async fetch(request: Request): Promise<Response> {
+        const url = new URL(request.url)
+        
+        // Upgrade to WebSocket
+        if (request.headers.get('Upgrade') === 'websocket') {
+          const pair = new WebSocketPair()
+          const [client, server] = Object.values(pair)
+          
+          // Create room if needed
+          if (!this.room) {
+            const sql = new DurableObjectSqliteSyncWrapper(this.ctx.storage)
+            const storage = new SQLiteSyncStorage({ sql })
+            
+            this.room = new TLSocketRoom({
+              schema: createTLSchema(),
+              storage,
+              onSessionRemoved: (room, { numSessionsRemaining }) => {
+                if (numSessionsRemaining === 0) {
+                  this.room?.close()
+                  this.room = null
+                }
+              }
+            })
+          }
+          
+          // Connect client
+          const sessionId = url.searchParams.get('sessionId')!
+          this.room.handleSocketConnect({
+            sessionId,
+            socket: server,
+            meta: { userId: 'user' },
+            isReadonly: false
+          })
+          
+          return new Response(null, {
+            status: 101,
+            webSocket: client
+          })
+        }
+        
+        return new Response('Not found', { status: 404 })
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Configure wrangler">
+    ```toml
+    # wrangler.toml
+    name = "tldraw-sync"
+    main = "src/index.ts"
+    compatibility_date = "2024-03-01"
+    
+    [[durable_objects.bindings]]
+    name = "ROOMS"
+    class_name = "RoomDurableObject"
+    
+    [[migrations]]
+    tag = "v1"
+    new_classes = ["RoomDurableObject"]
+    ```
+  </Step>
+  
+  <Step title="Create worker entry point">
+    ```ts
+    // src/index.ts
+    export { RoomDurableObject } from './RoomDurableObject'
+    
+    export default {
+      async fetch(request, env): Promise<Response> {
+        const url = new URL(request.url)
+        const roomId = url.pathname.slice(1)
+        
+        // Get Durable Object
+        const id = env.ROOMS.idFromName(roomId)
+        const stub = env.ROOMS.get(id)
+        
+        // Forward request
+        return stub.fetch(request)
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Deploy">
+    ```bash
+    npx wrangler deploy
+    ```
+  </Step>
+</Steps>
+
+### Client configuration
+
+```tsx
+import { useSync } from '@tldraw/sync'
+
+const store = useSync({
+  uri: `wss://your-worker.workers.dev/${roomId}`,
+  assets: myAssetStore
+})
+```
+
+## Railway
+
+Quick deployment with Railway's platform.
+
+### Setup
+
+<Steps>
+  <Step title="Create server">
+    ```ts
+    // server.ts
+    import express from 'express'
+    import { WebSocketServer } from 'ws'
+    import { TLSocketRoom } from '@tldraw/sync-core'
+    import { createTLSchema } from '@tldraw/tlschema'
+    
+    const app = express()
+    const PORT = process.env.PORT || 8080
+    
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`)
+    })
+    
+    const wss = new WebSocketServer({ server })
+    const rooms = new Map()
+    
+    wss.on('connection', (ws, req) => {
+      const url = new URL(req.url!, `wss://${req.headers.host}`)
+      const roomId = url.pathname.split('/').pop()!
+      const sessionId = url.searchParams.get('sessionId')!
+      
+      let room = rooms.get(roomId)
+      if (!room) {
+        room = new TLSocketRoom({
+          schema: createTLSchema(),
+          onSessionRemoved: (room, { numSessionsRemaining }) => {
+            if (numSessionsRemaining === 0) {
+              room.close()
+              rooms.delete(roomId)
+            }
+          }
+        })
+        rooms.set(roomId, room)
+      }
+      
+      room.handleSocketConnect({
+        sessionId,
+        socket: ws,
+        meta: { userId: 'anonymous' },
+        isReadonly: false
+      })
+    })
+    ```
+  </Step>
+  
+  <Step title="Add package.json scripts">
+    ```json
+    {
+      "scripts": {
+        "start": "node server.js",
+        "build": "tsc"
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Deploy to Railway">
+    ```bash
+    # Install Railway CLI
+    npm i -g @railway/cli
+    
+    # Login and deploy
+    railway login
+    railway init
+    railway up
+    ```
+  </Step>
+</Steps>
+
+## AWS (Elastic Beanstalk + RDS)
+
+Enterprise-grade deployment on AWS.
+
+### Architecture
+
+- **Elastic Beanstalk** - Application hosting
+- **RDS PostgreSQL** - Database storage
+- **S3** - Asset storage
+- **CloudFront** - CDN for assets
+
+### Setup
+
+<Steps>
+  <Step title="Configure Elastic Beanstalk">
+    Create `.ebextensions/01_websockets.config`:
+    
+    ```yaml
+    option_settings:
+      aws:elasticbeanstalk:environment:proxy:
+        ProxyServer: nginx
+      aws:elasticbeanstalk:environment:proxy:staticfiles:
+        /static: static
+    
+    files:
+      "/etc/nginx/conf.d/websockets.conf":
+        mode: "000644"
+        owner: root
+        group: root
+        content: |
+          upstream nodejs {
+            server 127.0.0.1:8081;
+            keepalive 256;
+          }
+          
+          server {
+            listen 8080;
+            
+            location /sync {
+              proxy_pass http://nodejs;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_set_header Host $host;
+              proxy_cache_bypass $http_upgrade;
+            }
+          }
+    ```
+  </Step>
+  
+  <Step title="Create RDS instance">
+    ```bash
+    aws rds create-db-instance \
+      --db-instance-identifier tldraw-sync-db \
+      --db-instance-class db.t3.micro \
+      --engine postgres \
+      --master-username admin \
+      --master-user-password <password> \
+      --allocated-storage 20
+    ```
+  </Step>
+  
+  <Step title="Deploy application">
+    ```bash
+    eb init -p node.js tldraw-sync
+    eb create tldraw-sync-env
+    eb deploy
+    ```
+  </Step>
+</Steps>
+
+## Docker deployment
+
+Containerized deployment for any platform.
+
+### Dockerfile
+
+```dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+RUN npm run build
+
+EXPOSE 8080
+
+CMD ["node", "dist/server.js"]
+```
+
+### Docker Compose
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  sync-server:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://user:pass@db:5432/tldraw
+    depends_on:
+      - db
+  
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=tldraw
+
+volumes:
+  postgres_data:
+```
+
+### Deploy
+
+```bash
+# Build and run
+docker-compose up -d
+
+# View logs
+docker-compose logs -f sync-server
+
+# Scale up
+docker-compose up -d --scale sync-server=3
+```
+
+## Environment variables
+
+Common environment variables for production:
+
+```bash
+# Server
+PORT=8080
+NODE_ENV=production
+
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/tldraw
+
+# Authentication
+JWT_SECRET=your-secret-key
+
+# Assets
+S3_BUCKET=my-tldraw-assets
+S3_REGION=us-east-1
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+
+# CORS
+ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com
+```
+
+## Production checklist
+
+Before going live:
+
+- [ ] Enable HTTPS/WSS (use a reverse proxy like nginx or Caddy)
+- [ ] Set up authentication and authorization
+- [ ] Configure CORS properly
+- [ ] Enable rate limiting
+- [ ] Set up monitoring and logging
+- [ ] Configure backups for storage
+- [ ] Test reconnection handling
+- [ ] Load test with expected concurrent users
+- [ ] Set up health check endpoints
+- [ ] Configure graceful shutdown
+- [ ] Document disaster recovery procedures
+
+## Monitoring
+
+Add health checks and metrics:
+
+```ts
+import express from 'express'
+
+const app = express()
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    rooms: rooms.size,
+    memory: process.memoryUsage()
+  })
+})
+
+// Metrics endpoint
+app.get('/metrics', (req, res) => {
+  const metrics = {
+    activeRooms: rooms.size,
+    totalSessions: Array.from(rooms.values())
+      .reduce((sum, room) => sum + room.getNumActiveSessions(), 0),
+    memoryUsage: process.memoryUsage(),
+    uptime: process.uptime()
+  }
+  res.json(metrics)
+})
+```
+
+## Scaling considerations
+
+### Horizontal scaling
+
+For multiple server instances:
+
+- Use a shared storage backend (PostgreSQL, Redis)
+- Implement sticky sessions or connection routing
+- Use a message broker for cross-instance communication
+
+### Vertical scaling
+
+For single large instances:
+
+- Increase Node.js memory limit: `node --max-old-space-size=4096`
+- Use clustering to utilize multiple CPU cores
+- Monitor memory usage and implement room cleanup
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Customization" icon="palette" href="/sync/customization">
+    Customize sync behavior and presence
+  </Card>
+  
+  <Card title="Server API" icon="code" href="/sync/api/server">
+    Complete server API reference
+  </Card>
+</CardGroup>

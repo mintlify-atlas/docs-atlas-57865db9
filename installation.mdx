@@ -1,0 +1,173 @@
+---
+title: Installation
+description: Install the tldraw SDK in your React project
+---
+
+# Installation
+
+Install tldraw in your React project using your preferred package manager.
+
+## Prerequisites
+
+Before installing tldraw, ensure your project meets these requirements:
+
+- **Node.js**: Version 20.0.0 or higher
+- **React**: Version 18.2.0 or higher (or React 19.2.1+)
+- **React DOM**: Version 18.2.0 or higher (or React DOM 19.2.1+)
+
+## Install the package
+
+<CodeGroup>
+
+```bash npm
+npm install tldraw
+```
+
+```bash yarn
+yarn add tldraw
+```
+
+```bash pnpm
+pnpm add tldraw
+```
+
+```bash bun
+bun add tldraw
+```
+
+</CodeGroup>
+
+This installs the `tldraw` package (version 4.4.0 or later), which includes:
+
+- The `<Tldraw />` component with full UI and default tools
+- Core editor functionality via `@tldraw/editor`
+- Default shape utilities (arrows, text, draw, geo shapes, etc.)
+- Complete UI system with menus, toolbars, and panels
+
+## Import the CSS
+
+The tldraw SDK requires CSS for proper rendering. Import the stylesheet in your app:
+
+```tsx
+import 'tldraw/tldraw.css'
+```
+
+<Note>
+  The CSS import is required for tldraw to render correctly. Make sure to include it before mounting the `<Tldraw />` component.
+</Note>
+
+## Verify installation
+
+After installation, verify that tldraw is ready to use:
+
+<Steps>
+  <Step title="Check package.json">
+    Confirm `tldraw` appears in your dependencies:
+
+    ```json
+    {
+      "dependencies": {
+        "tldraw": "^4.4.0"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Test a basic import">
+    Create a test file and import the main component:
+
+    ```tsx
+    import { Tldraw } from 'tldraw'
+    import 'tldraw/tldraw.css'
+
+    console.log('tldraw loaded successfully')
+    ```
+  </Step>
+
+  <Step title="Build your app">
+    Ensure your project builds without errors:
+
+    ```bash
+    npm run build
+    ```
+  </Step>
+</Steps>
+
+## Package dependencies
+
+The tldraw package includes these key dependencies:
+
+- **@tldraw/editor** - Core infinite canvas engine
+- **@tldraw/store** - Reactive client-side database
+- **@tiptap/react** - Rich text editing support
+- **classnames** - CSS class utilities
+- **hotkeys-js** - Keyboard shortcut handling
+- **idb** - IndexedDB wrapper for persistence
+
+These are automatically installed with the tldraw package.
+
+## TypeScript support
+
+tldraw is written in TypeScript and includes type definitions out of the box. No additional `@types` packages are needed.
+
+```tsx
+import { Tldraw, Editor, TLShape } from 'tldraw'
+
+// Full TypeScript support with autocomplete and type checking
+function handleEditorMount(editor: Editor) {
+  const shapes: TLShape[] = editor.getCurrentPageShapes()
+  console.log(`Canvas has ${shapes.length} shapes`)
+}
+```
+
+## Next steps
+
+Now that tldraw is installed, you're ready to create your first canvas:
+
+<Card title="Quick start" icon="bolt" href="/quickstart">
+  Get a working infinite canvas in your app
+</Card>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found errors">
+    If you see module resolution errors, ensure:
+    - You're using Node.js 20.0.0 or higher
+    - Your package manager installed all dependencies
+    - Your bundler supports ES modules (most modern bundlers do)
+    
+    Try reinstalling:
+    ```bash
+    rm -rf node_modules package-lock.json
+    npm install
+    ```
+  </Accordion>
+
+  <Accordion title="React peer dependency warnings">
+    tldraw requires React 18.2.0+ or React 19.2.1+. If you see peer dependency warnings:
+    
+    ```bash
+    npm install react@^18.2.0 react-dom@^18.2.0
+    ```
+  </Accordion>
+
+  <Accordion title="CSS not loading">
+    If styles aren't applied:
+    - Verify you've imported `tldraw/tldraw.css`
+    - Ensure your bundler supports CSS imports
+    - Check that the import appears before rendering `<Tldraw />`
+  </Accordion>
+
+  <Accordion title="Build errors with TypeScript">
+    tldraw requires TypeScript 5.0+. Update your TypeScript version:
+    
+    ```bash
+    npm install typescript@latest --save-dev
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  For framework-specific setup (Next.js, Vite, etc.), check out the [starter kits](https://tldraw.dev/starter-kits/overview) which include pre-configured templates.
+</Note>

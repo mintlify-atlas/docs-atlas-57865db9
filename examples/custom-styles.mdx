@@ -1,0 +1,302 @@
+---
+title: Custom styles
+description: Add custom style properties to shapes using StyleProp
+---
+
+You can create custom style properties for your shapes using `StyleProp`. Styles are special properties that persist across shape creation and can be edited via the style panel.
+
+## Creating a custom style
+
+```tsx ShapeWithCustomStylesExample.tsx
+import {
+  BaseBoxShapeUtil,
+  DefaultStylePanel,
+  DefaultStylePanelContent,
+  HTMLContainer,
+  StyleProp,
+  T,
+  Tldraw,
+  TLShape,
+  useEditor,
+  useRelevantStyles,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
+
+const MY_SHAPE_WITH_CUSTOM_STYLES_TYPE = 'myshapewithcustomstyles'
+
+declare module 'tldraw' {
+  export interface TLGlobalShapePropsMap {
+    [MY_SHAPE_WITH_CUSTOM_STYLES_TYPE]: {
+      w: number
+      h: number
+      rating: MyRatingStyle
+    }
+  }
+}
+
+// [1] Define the custom style
+const myRatingStyle = StyleProp.defineEnum('example:rating', {
+  defaultValue: 1,
+  values: [1, 2, 3, 4, 5],
+})
+
+// [2] Extract the type
+type MyRatingStyle = T.TypeOf<typeof myRatingStyle>
+
+type IMyShape = TLShape<typeof MY_SHAPE_WITH_CUSTOM_STYLES_TYPE>
+
+class MyShapeUtil extends BaseBoxShapeUtil<IMyShape> {
+  static override type = MY_SHAPE_WITH_CUSTOM_STYLES_TYPE
+
+  // [3] Include the style in props
+  static override props = {
+    w: T.number,
+    h: T.number,
+    rating: myRatingStyle,
+  }
+
+  getDefaultProps(): IMyShape['props'] {
+    return {
+      w: 300,
+      h: 300,
+      rating: 4,
+    }
+  }
+
+  component(shape: IMyShape) {
+    // [4] Use the style in rendering
+    const stars = ['☆', '☆', '☆', '☆', '☆']
+    for (let i = 0; i < shape.props.rating; i++) {
+      stars[i] = '★'
+    }
+
+    return (
+      <HTMLContainer
+        id={shape.id}
+        style={{ backgroundColor: 'var(--tl-color-low-border)', overflow: 'hidden' }}
+      >
+        {stars}
+      </HTMLContainer>
+    )
+  }
+
+  indicator(shape: IMyShape) {
+    return <rect width={shape.props.w} height={shape.props.h} />
+  }
+}
+
+// [5] Create custom style panel
+function CustomStylePanel() {
+  const editor = useEditor()
+  const styles = useRelevantStyles()
+  if (!styles) return null
+
+  const rating = styles.get(myRatingStyle)
+
+  return (
+    <DefaultStylePanel>
+      <DefaultStylePanelContent />
+      {rating !== undefined && (
+        <div>
+          <select
+            style={{ width: '100%', padding: 4 }}
+            value={rating.type === 'mixed' ? '' : rating.value}
+            onChange={(e) => {
+              editor.markHistoryStoppingPoint()
+              const value = myRatingStyle.validate(+e.currentTarget.value)
+              editor.setStyleForSelectedShapes(myRatingStyle, value)
+            }}
+          >
+            {rating.type === 'mixed' ? <option value="">Mixed</option> : null}
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+            <option value={4}>4</option>
+            <option value={5}>5</option>
+          </select>
+        </div>
+      )}
+    </DefaultStylePanel>
+  )
+}
+
+export default function ShapeWithCustomStylesExample() {
+  return (
+    <div className="tldraw__editor">
+      <Tldraw
+        shapeUtils={[MyShapeUtil]}
+        components={{
+          StylePanel: CustomStylePanel,
+        }}
+        onMount={(editor) => {
+          editor.createShape({ type: 'myshapewithcustomstyles', x: 100, y: 100 })
+          editor.selectAll()
+          editor.createShape({
+            type: 'myshapewithcustomstyles',
+            x: 450,
+            y: 250,
+            props: { rating: 5 },
+          })
+        }}
+      />
+    </div>
+  )
+}
+```
+
+## How styles work
+
+Styles are special properties that:
+
+1. Persist across shape creation (the editor remembers the last value)
+2. Can be edited via the style panel for multiple selected shapes
+3. Automatically handle "mixed" states when multiple shapes have different values
+
+## Defining styles
+
+### Enum style
+
+```tsx
+const sizeStyle = StyleProp.defineEnum('my-app:size', {
+  defaultValue: 'medium',
+  values: ['small', 'medium', 'large'],
+})
+```
+
+### Number style
+
+```tsx
+const opacityStyle = StyleProp.define('my-app:opacity', {
+  defaultValue: 1,
+  type: T.number,
+})
+```
+
+### Color style
+
+```tsx
+const customColorStyle = StyleProp.defineEnum('my-app:color', {
+  defaultValue: 'blue',
+  values: ['red', 'blue', 'green', 'yellow'],
+})
+```
+
+## Using styles in shape utils
+
+### 1. Add to props
+
+```tsx
+static override props = {
+  w: T.number,
+  h: T.number,
+  rating: myRatingStyle,
+}
+```
+
+### 2. Set default value
+
+```tsx
+getDefaultProps(): IMyShape['props'] {
+  return {
+    w: 200,
+    h: 200,
+    rating: 4, // Will be overwritten by editor's current style value
+  }
+}
+```
+
+<Note>
+The default value you set in `getDefaultProps` will be overwritten by the editor's current value for that style, which is either the default value or the most recent value the user set.
+</Note>
+
+### 3. Use in rendering
+
+```tsx
+component(shape: IMyShape) {
+  const rating = shape.props.rating
+  // Use rating to render the shape
+  return <div>{rating}</div>
+}
+```
+
+## Custom style panel
+
+Use `useRelevantStyles` to get the styles of selected shapes:
+
+```tsx
+import { useEditor, useRelevantStyles, DefaultStylePanel } from 'tldraw'
+
+function CustomStylePanel() {
+  const editor = useEditor()
+  const styles = useRelevantStyles()
+  if (!styles) return null
+
+  const myStyle = styles.get(myCustomStyle)
+
+  return (
+    <DefaultStylePanel>
+      <DefaultStylePanelContent />
+      {myStyle !== undefined && (
+        <select
+          value={myStyle.type === 'mixed' ? '' : myStyle.value}
+          onChange={(e) => {
+            editor.markHistoryStoppingPoint()
+            const value = myCustomStyle.validate(e.currentTarget.value)
+            editor.setStyleForSelectedShapes(myCustomStyle, value)
+          }}
+        >
+          {myStyle.type === 'mixed' ? <option value="">Mixed</option> : null}
+          <option value="option1">Option 1</option>
+          <option value="option2">Option 2</option>
+        </select>
+      )}
+    </DefaultStylePanel>
+  )
+}
+```
+
+## Setting styles programmatically
+
+```tsx
+// Set style for selected shapes
+editor.setStyleForSelectedShapes(myRatingStyle, 5)
+
+// Set style for next shapes to be created
+editor.setStyleForNextShapes(myRatingStyle, 5)
+
+// Get current style value
+const currentValue = editor.getStyleForNextShape(myRatingStyle)
+```
+
+## Handling mixed values
+
+When multiple shapes with different style values are selected, `useRelevantStyles` returns a "mixed" type:
+
+```tsx
+const rating = styles.get(myRatingStyle)
+
+if (rating.type === 'mixed') {
+  // Multiple different values
+  return <span>Mixed</span>
+} else {
+  // Single value
+  return <span>{rating.value}</span>
+}
+```
+
+## Style naming convention
+
+Prefix your style IDs with your app name to avoid conflicts:
+
+```tsx
+const myStyle = StyleProp.defineEnum('my-app:style-name', {
+  defaultValue: 'default',
+  values: ['default', 'alternative'],
+})
+```
+
+## Related
+
+- [Custom shape](/examples/custom-shape) - Create custom shapes
+- [Custom UI](/examples/custom-ui) - Build custom style panels
+- [StyleProp reference](/reference/editor/StyleProp)

@@ -1,0 +1,419 @@
+---
+title: Setting up multiplayer
+description: Complete guide to setting up production-ready multiplayer
+---
+
+# Setting up multiplayer
+
+This guide covers production setup with your own server infrastructure. For quick prototyping, see the [quick start guide](/sync/quickstart).
+
+## Overview
+
+A production multiplayer setup requires:
+
+1. **Client setup** - React components using `useSync`
+2. **Server setup** - WebSocket server with `TLSocketRoom`
+3. **Storage layer** - Persistence using SQLite, PostgreSQL, or custom storage
+4. **Asset storage** - External storage for images and files
+
+## Client setup
+
+Use the `useSync` hook to connect to your server:
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSync } from '@tldraw/sync'
+import 'tldraw/tldraw.css'
+
+function MyApp({ roomId }: { roomId: string }) {
+  const store = useSync({
+    // Your WebSocket server URL
+    uri: `wss://sync.example.com/connect/${roomId}`,
+    
+    // Asset storage (required)
+    assets: {
+      async upload(asset, file) {
+        const formData = new FormData()
+        formData.append('file', file)
+        
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        })
+        
+        const { url } = await response.json()
+        return { src: url }
+      },
+      
+      resolve(asset) {
+        return asset.props.src
+      }
+    },
+    
+    // User information
+    userInfo: {
+      id: 'user-123',
+      name: 'Alice',
+      color: '#ff0000'
+    }
+  })
+  
+  if (store.status === 'loading') {
+    return <div>Loading...</div>
+  }
+  
+  if (store.status === 'error') {
+    return <div>Error: {store.error.message}</div>
+  }
+  
+  return <Tldraw store={store.store} />
+}
+```
+
+## Server setup
+
+### Basic WebSocket server
+
+Create a WebSocket server using `TLSocketRoom`:
+
+```ts
+import { WebSocketServer } from 'ws'
+import { TLSocketRoom } from '@tldraw/sync-core'
+import { createTLSchema } from '@tldraw/tlschema'
+
+const wss = new WebSocketServer({ port: 8080 })
+const rooms = new Map<string, TLSocketRoom<any, any>>()
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const roomId = url.pathname.split('/').pop()!
+  
+  // Get or create room
+  let room = rooms.get(roomId)
+  if (!room) {
+    room = new TLSocketRoom({
+      schema: createTLSchema(),
+      onSessionRemoved: (room, { numSessionsRemaining }) => {
+        if (numSessionsRemaining === 0) {
+          room.close()
+          rooms.delete(roomId)
+        }
+      }
+    })
+    rooms.set(roomId, room)
+  }
+  
+  // Connect client to room
+  const sessionId = url.searchParams.get('sessionId')!
+  
+  room.handleSocketConnect({
+    sessionId,
+    socket: ws,
+    meta: { userId: 'anonymous' },
+    isReadonly: false
+  })
+})
+```
+
+### With Express
+
+Integrate with an Express server:
+
+```ts
+import express from 'express'
+import { WebSocketServer } from 'ws'
+import { TLSocketRoom } from '@tldraw/sync-core'
+import { createTLSchema } from '@tldraw/tlschema'
+
+const app = express()
+const server = app.listen(8080)
+
+const wss = new WebSocketServer({ server })
+const rooms = new Map<string, TLSocketRoom<any, any>>()
+
+wss.on('connection', (ws, req) => {
+  // ... same as above
+})
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', rooms: rooms.size })
+})
+```
+
+## Storage options
+
+Choose a storage backend for persistence.
+
+### In-memory (development only)
+
+```ts
+import { InMemorySyncStorage } from '@tldraw/sync-core'
+
+const room = new TLSocketRoom({
+  schema: createTLSchema(),
+  storage: new InMemorySyncStorage()
+})
+```
+
+<Warning>
+  In-memory storage loses all data when the server restarts. Only use for development.
+</Warning>
+
+### SQLite (recommended)
+
+```ts
+import { SQLiteSyncStorage, NodeSqliteWrapper } from '@tldraw/sync-core'
+import Database from 'better-sqlite3'
+
+const db = new Database('./rooms.db')
+const sql = new NodeSqliteWrapper(db)
+
+const room = new TLSocketRoom({
+  schema: createTLSchema(),
+  storage: new SQLiteSyncStorage({ sql })
+})
+```
+
+### Cloudflare Durable Objects
+
+```ts
+import { 
+  SQLiteSyncStorage, 
+  DurableObjectSqliteSyncWrapper 
+} from '@tldraw/sync-core'
+
+export class MyDurableObject extends DurableObject {
+  async fetch(request: Request) {
+    const sql = new DurableObjectSqliteSyncWrapper(this.ctx.storage)
+    
+    const room = new TLSocketRoom({
+      schema: createTLSchema(),
+      storage: new SQLiteSyncStorage({ sql })
+    })
+    
+    // Handle WebSocket upgrade
+    // ...
+  }
+}
+```
+
+### Custom storage
+
+Implement the `TLSyncStorage` interface:
+
+```ts
+import { TLSyncStorage } from '@tldraw/sync-core'
+
+class PostgresStorage implements TLSyncStorage<TLRecord> {
+  async transaction<T>(fn: (txn: TLSyncStorageTransaction<TLRecord>) => T) {
+    // Implement transaction logic with PostgreSQL
+  }
+  
+  onChange(callback: () => void) {
+    // Subscribe to external changes
+    return () => { /* cleanup */ }
+  }
+}
+
+const room = new TLSocketRoom({
+  schema: createTLSchema(),
+  storage: new PostgresStorage()
+})
+```
+
+## Asset storage
+
+Handle file uploads with external storage:
+
+### S3-compatible storage
+
+```tsx
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { useSync } from '@tldraw/sync'
+
+const s3 = new S3Client({ region: 'us-east-1' })
+
+const store = useSync({
+  uri: 'wss://sync.example.com/room',
+  assets: {
+    async upload(asset, file) {
+      const key = `assets/${Date.now()}-${file.name}`
+      
+      await s3.send(new PutObjectCommand({
+        Bucket: 'my-bucket',
+        Key: key,
+        Body: file,
+        ContentType: file.type
+      }))
+      
+      return { 
+        src: `https://my-bucket.s3.amazonaws.com/${key}` 
+      }
+    },
+    
+    resolve(asset) {
+      return asset.props.src
+    }
+  }
+})
+```
+
+### Cloudflare R2
+
+```tsx
+const store = useSync({
+  uri: 'wss://sync.example.com/room',
+  assets: {
+    async upload(asset, file) {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch('/api/upload-to-r2', {
+        method: 'POST',
+        body: formData
+      })
+      
+      const { url } = await response.json()
+      return { src: url }
+    },
+    
+    resolve(asset) {
+      return asset.props.src
+    }
+  }
+})
+```
+
+## Authentication
+
+Add authentication to protect rooms:
+
+### Client-side token
+
+```tsx
+const store = useSync({
+  uri: async () => {
+    // Get auth token
+    const token = await getAuthToken()
+    return `wss://sync.example.com/room?token=${token}`
+  },
+  assets: myAssetStore
+})
+```
+
+### Server-side validation
+
+```ts
+import jwt from 'jsonwebtoken'
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url!, `ws://${req.headers.host}`)
+  const token = url.searchParams.get('token')
+  
+  try {
+    const user = jwt.verify(token!, process.env.JWT_SECRET!)
+    
+    room.handleSocketConnect({
+      sessionId: url.searchParams.get('sessionId')!,
+      socket: ws,
+      meta: { userId: user.id },
+      isReadonly: false
+    })
+  } catch (error) {
+    ws.close(4403, 'Invalid token')
+  }
+})
+```
+
+See the [authentication guide](/sync/authentication) for more details.
+
+## Schema management
+
+Use a consistent schema across client and server:
+
+```ts
+// shared/schema.ts
+import { createTLSchema } from '@tldraw/tlschema'
+
+export const mySchema = createTLSchema()
+```
+
+```tsx
+// client.tsx
+import { mySchema } from './shared/schema'
+
+const store = useSync({
+  uri: 'wss://sync.example.com/room',
+  schema: mySchema,
+  assets: myAssetStore
+})
+```
+
+```ts
+// server.ts
+import { mySchema } from './shared/schema'
+
+const room = new TLSocketRoom({
+  schema: mySchema,
+  storage: myStorage
+})
+```
+
+## Error handling
+
+Handle sync errors gracefully:
+
+```tsx
+import { TLSyncErrorCloseEventReason } from '@tldraw/sync'
+
+function MyApp() {
+  const [error, setError] = useState<string | null>(null)
+  
+  const store = useSync({
+    uri: 'wss://sync.example.com/room',
+    assets: myAssetStore,
+    // onSyncError is internal, handle via store.status === 'error'
+  })
+  
+  if (store.status === 'error') {
+    const errorMsg = store.error.message
+    
+    // Handle specific error types
+    if (errorMsg.includes('NOT_FOUND')) {
+      return <div>Room not found</div>
+    }
+    
+    if (errorMsg.includes('FORBIDDEN')) {
+      return <div>Access denied</div>
+    }
+    
+    if (errorMsg.includes('CLIENT_TOO_OLD')) {
+      return <div>Please refresh to update your app</div>
+    }
+    
+    return <div>Connection error: {errorMsg}</div>
+  }
+  
+  // ...
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/sync/authentication">
+    Add user authentication and access control
+  </Card>
+  
+  <Card title="Deployment" icon="server" href="/sync/deployment">
+    Deploy your sync server to production
+  </Card>
+  
+  <Card title="Customization" icon="palette" href="/sync/customization">
+    Customize sync behavior and presence
+  </Card>
+  
+  <Card title="Client API" icon="code" href="/sync/api/client">
+    Complete client API reference
+  </Card>
+</CardGroup>

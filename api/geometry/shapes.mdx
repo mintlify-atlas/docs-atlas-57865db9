@@ -1,0 +1,449 @@
+---
+title: Geometry2d shapes
+description: 2D geometry classes for hit testing and spatial calculations
+---
+
+The `Geometry2d` class hierarchy provides specialized 2D geometry shapes for hit testing, intersection detection, and spatial calculations. These shapes are used internally by shape utilities and the editor.
+
+## Base class: Geometry2d
+
+All geometry shapes extend the abstract `Geometry2d` base class.
+
+### Constructor options
+
+<ParamField path="isFilled" type="boolean">
+  Whether the geometry is filled (affects hit testing)
+</ParamField>
+
+<ParamField path="isClosed" type="boolean">
+  Whether the geometry forms a closed shape
+</ParamField>
+
+<ParamField path="isLabel" type="boolean" default="false">
+  Whether this geometry represents a label
+</ParamField>
+
+<ParamField path="isInternal" type="boolean" default="false">
+  Whether this geometry is internal (for filtering)
+</ParamField>
+
+<ParamField path="debugColor" type="string" optional>
+  Color for debug visualization
+</ParamField>
+
+### Common properties
+
+<ParamField path="vertices" type="Vec[]">
+  Array of vertices that make up the geometry
+</ParamField>
+
+<ParamField path="bounds" type="Box">
+  The bounding box of the geometry
+</ParamField>
+
+<ParamField path="center" type="Vec">
+  The center point of the bounding box
+</ParamField>
+
+<ParamField path="area" type="number">
+  The area of the geometry (0 for open shapes)
+</ParamField>
+
+<ParamField path="length" type="number">
+  The perimeter or length of the geometry
+</ParamField>
+
+### Common methods
+
+#### nearestPoint
+
+```typescript
+geometry.nearestPoint(point: VecLike): Vec
+```
+
+Finds the nearest point on the geometry to the given point.
+
+#### hitTestPoint
+
+```typescript
+geometry.hitTestPoint(
+  point: VecLike,
+  margin?: number,
+  hitInside?: boolean
+): boolean
+```
+
+Tests if a point hits the geometry within a margin.
+
+```typescript
+const circle = new Circle2d({ radius: 50, isFilled: true })
+const hit = circle.hitTestPoint({ x: 25, y: 25 }, 0, true) // true
+```
+
+#### distanceToPoint
+
+```typescript
+geometry.distanceToPoint(point: VecLike, hitInside?: boolean): number
+```
+
+Returns the distance from a point to the geometry. Returns negative if inside a filled shape.
+
+#### intersectLineSegment
+
+```typescript
+geometry.intersectLineSegment(a: VecLike, b: VecLike): VecLike[]
+```
+
+Finds all intersection points with a line segment.
+
+#### toSimpleSvgPath
+
+```typescript
+geometry.toSimpleSvgPath(): string
+```
+
+Converts the geometry to an SVG path string.
+
+## Shape classes
+
+### Circle2d
+
+A circle defined by center position and radius.
+
+```typescript
+import { Circle2d } from 'tldraw'
+
+const circle = new Circle2d({
+  x: 0,
+  y: 0,
+  radius: 50,
+  isFilled: true
+})
+```
+
+<ParamField path="x" type="number" default="0">
+  X-coordinate of the circle's top-left bounding box corner
+</ParamField>
+
+<ParamField path="y" type="number" default="0">
+  Y-coordinate of the circle's top-left bounding box corner
+</ParamField>
+
+<ParamField path="radius" type="number">
+  The radius of the circle
+</ParamField>
+
+<ParamField path="isFilled" type="boolean">
+  Whether the circle is filled
+</ParamField>
+
+### Rectangle2d
+
+An axis-aligned rectangle.
+
+```typescript
+import { Rectangle2d } from 'tldraw'
+
+const rect = new Rectangle2d({
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 50,
+  isFilled: true
+})
+```
+
+<ParamField path="x" type="number" default="0">
+  X-coordinate of the top-left corner
+</ParamField>
+
+<ParamField path="y" type="number" default="0">
+  Y-coordinate of the top-left corner
+</ParamField>
+
+<ParamField path="width" type="number">
+  Width of the rectangle
+</ParamField>
+
+<ParamField path="height" type="number">
+  Height of the rectangle
+</ParamField>
+
+<ParamField path="isFilled" type="boolean">
+  Whether the rectangle is filled
+</ParamField>
+
+### Ellipse2d
+
+An ellipse defined by width and height.
+
+```typescript
+import { Ellipse2d } from 'tldraw'
+
+const ellipse = new Ellipse2d({
+  width: 100,
+  height: 50,
+  isFilled: true
+})
+```
+
+<ParamField path="width" type="number">
+  Width of the ellipse
+</ParamField>
+
+<ParamField path="height" type="number">
+  Height of the ellipse
+</ParamField>
+
+<ParamField path="isFilled" type="boolean">
+  Whether the ellipse is filled
+</ParamField>
+
+### Polygon2d
+
+A closed polygon defined by an array of points.
+
+```typescript
+import { Polygon2d, Vec } from 'tldraw'
+
+const triangle = new Polygon2d({
+  points: [
+    new Vec(0, 0),
+    new Vec(100, 0),
+    new Vec(50, 100)
+  ],
+  isFilled: true
+})
+```
+
+<ParamField path="points" type="Vec[]">
+  Array of at least 3 points defining the polygon
+</ParamField>
+
+<ParamField path="isFilled" type="boolean">
+  Whether the polygon is filled
+</ParamField>
+
+### Polyline2d
+
+An open or closed polyline defined by an array of points.
+
+```typescript
+import { Polyline2d, Vec } from 'tldraw'
+
+const line = new Polyline2d({
+  points: [
+    new Vec(0, 0),
+    new Vec(50, 50),
+    new Vec(100, 0)
+  ]
+})
+```
+
+<ParamField path="points" type="Vec[]">
+  Array of at least 2 points defining the polyline
+</ParamField>
+
+### Group2d
+
+A group of multiple geometries treated as one.
+
+```typescript
+import { Group2d, Circle2d, Rectangle2d } from 'tldraw'
+
+const group = new Group2d({
+  children: [
+    new Circle2d({ radius: 20, isFilled: true }),
+    new Rectangle2d({ x: 30, y: 0, width: 40, height: 40, isFilled: true })
+  ]
+})
+```
+
+<ParamField path="children" type="Geometry2d[]">
+  Array of child geometries
+</ParamField>
+
+The Group2d class automatically flattens nested groups and provides methods that operate across all children.
+
+### Stadium2d
+
+A stadium shape (rectangle with semicircular ends).
+
+```typescript
+import { Stadium2d } from 'tldraw'
+
+const stadium = new Stadium2d({
+  width: 100,
+  height: 50,
+  isFilled: true
+})
+```
+
+<ParamField path="width" type="number">
+  Width of the stadium
+</ParamField>
+
+<ParamField path="height" type="number">
+  Height of the stadium
+</ParamField>
+
+<ParamField path="isFilled" type="boolean">
+  Whether the stadium is filled
+</ParamField>
+
+### Edge2d
+
+A single line segment between two points.
+
+```typescript
+import { Edge2d, Vec } from 'tldraw'
+
+const edge = new Edge2d({
+  start: new Vec(0, 0),
+  end: new Vec(100, 100)
+})
+```
+
+<ParamField path="start" type="Vec">
+  Starting point of the edge
+</ParamField>
+
+<ParamField path="end" type="Vec">
+  Ending point of the edge
+</ParamField>
+
+### Point2d
+
+A single point in 2D space.
+
+```typescript
+import { Point2d, Vec } from 'tldraw'
+
+const point = new Point2d({
+  point: new Vec(50, 50)
+})
+```
+
+<ParamField path="point" type="Vec">
+  The point location
+</ParamField>
+
+### CubicBezier2d
+
+A cubic Bezier curve.
+
+```typescript
+import { CubicBezier2d, Vec } from 'tldraw'
+
+const bezier = new CubicBezier2d({
+  start: new Vec(0, 0),
+  cp1: new Vec(25, 50),
+  cp2: new Vec(75, 50),
+  end: new Vec(100, 0)
+})
+```
+
+### CubicSpline2d
+
+A cubic spline curve through multiple points.
+
+```typescript
+import { CubicSpline2d, Vec } from 'tldraw'
+
+const spline = new CubicSpline2d({
+  points: [
+    new Vec(0, 0),
+    new Vec(50, 50),
+    new Vec(100, 0),
+    new Vec(150, 50)
+  ]
+})
+```
+
+## Geometry filtering
+
+The `Geometry2dFilters` interface allows filtering geometries in groups:
+
+```typescript
+import { Geometry2dFilters } from 'tldraw'
+
+// Predefined filter sets
+Geometry2dFilters.EXCLUDE_NON_STANDARD // excludes labels and internal
+Geometry2dFilters.INCLUDE_ALL
+Geometry2dFilters.EXCLUDE_LABELS
+Geometry2dFilters.EXCLUDE_INTERNAL
+
+// Custom filters
+const customFilter = {
+  includeLabels: false,
+  includeInternal: true
+}
+
+const vertices = group.getVertices(customFilter)
+```
+
+## Example: Custom hit testing
+
+```typescript
+import { Circle2d, Rectangle2d, Group2d, Vec } from 'tldraw'
+
+// Create a compound shape
+const compound = new Group2d({
+  children: [
+    new Circle2d({
+      x: 0,
+      y: 0,
+      radius: 30,
+      isFilled: true
+    }),
+    new Rectangle2d({
+      x: 25,
+      y: -10,
+      width: 50,
+      height: 20,
+      isFilled: true
+    })
+  ]
+})
+
+// Test if a point hits the shape
+const point = new Vec(40, 5)
+const isHit = compound.hitTestPoint(point, 2, true)
+
+// Find nearest point on the shape
+const nearest = compound.nearestPoint({ x: 100, y: 100 })
+
+// Get the bounds
+const bounds = compound.bounds
+console.log(bounds) // Box containing all children
+```
+
+## Example: Intersection detection
+
+```typescript
+import { Rectangle2d, Vec } from 'tldraw'
+
+const rect = new Rectangle2d({
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100,
+  isFilled: true
+})
+
+// Find intersections with a line
+const lineStart = new Vec(-10, 50)
+const lineEnd = new Vec(110, 50)
+const intersections = rect.intersectLineSegment(lineStart, lineEnd)
+// Returns [Vec(0, 50), Vec(100, 50)]
+
+// Check if line intersects at all
+const hits = rect.hitTestLineSegment(lineStart, lineEnd)
+// Returns true
+```
+
+## Related
+
+- [Box class](/api/geometry/box)
+- [Vec class](/api/geometry/vec)
+- [Geometry primitives overview](/api/geometry/primitives)

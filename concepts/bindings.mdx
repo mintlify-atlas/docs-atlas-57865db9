@@ -1,0 +1,580 @@
+---
+title: Bindings
+description: Bindings create relationships between shapes in tldraw, enabling arrows to connect to shapes, stickers to attach to frames, and other shape interactions.
+---
+
+Bindings represent relationships between shapes on the canvas. They enable features like arrows that stay connected to shapes when moved, stickers attached to frames, and other dynamic shape interactions.
+
+## Overview
+
+The binding system consists of:
+
+- **Binding records**: Data stored in the store linking two shapes
+- **BindingUtil classes**: Define behavior for each binding type
+- **Lifecycle hooks**: Respond to creation, changes, and deletion
+- **Automatic updates**: Bindings update automatically when connected shapes change
+
+## Anatomy of a binding
+
+Every binding has two parts:
+
+### 1. Binding record (data)
+
+Stored in the Editor's store:
+
+```tsx
+interface TLArrowBinding extends TLBinding {
+  type: 'arrow'
+  // Shape the arrow originates from
+  fromId: TLShapeId
+  // Shape the arrow points to
+  toId: TLShapeId
+  props: {
+    // Connection point on the target shape (0-1 normalized)
+    terminal: 'start' | 'end'
+    normalizedAnchor: { x: number; y: number }
+    isExact: boolean
+    isPrecise: boolean
+  }
+}
+```
+
+### 2. BindingUtil class (behavior)
+
+Defines how the binding works:
+
+```tsx
+import { BindingUtil, TLArrowBinding } from '@tldraw/editor'
+
+export class ArrowBindingUtil extends BindingUtil<TLArrowBinding> {
+  static override type = 'arrow' as const
+  
+  getDefaultProps(): Partial<TLArrowBinding['props']> {
+    return {
+      terminal: 'start',
+      normalizedAnchor: { x: 0.5, y: 0.5 },
+      isExact: false,
+      isPrecise: false
+    }
+  }
+  
+  // Called when bound shape moves/changes
+  onAfterChangeToShape({ binding, shapeAfter }: BindingOnShapeChangeOptions) {
+    // Update arrow position to follow the shape
+    updateArrowTerminal(this.editor, binding, shapeAfter)
+  }
+  
+  // Called when bound shape is deleted
+  onBeforeDeleteToShape({ binding, shape }: BindingOnShapeDeleteOptions) {
+    // Remove the binding
+    this.editor.deleteBinding(binding.id)
+    
+    // Update arrow to no longer point to deleted shape
+    const arrow = this.editor.getShape(binding.fromId)
+    if (arrow) {
+      // Convert binding to fixed point
+      updateArrowToFreePoint(this.editor, arrow, binding)
+    }
+  }
+}
+```
+
+## Creating a custom binding
+
+Here's a complete example of a sticker binding that attaches stickers to frames:
+
+<Steps>
+
+### Define the binding type
+
+```tsx
+import { TLBinding, TLBaseBinding, RecordProps, T } from '@tldraw/editor'
+
+type StickerBinding = TLBaseBinding<
+  'sticker',
+  {
+    // Position relative to frame (0-1)
+    relativePosition: { x: number; y: number }
+    // Whether sticker moves with frame
+    locked: boolean
+  }
+>
+
+const stickerBindingProps: RecordProps<StickerBinding> = {
+  relativePosition: T.object({
+    x: T.number,
+    y: T.number
+  }),
+  locked: T.boolean
+}
+```
+
+### Create the BindingUtil class
+
+```tsx
+import { 
+  BindingUtil,
+  BindingOnShapeChangeOptions,
+  BindingOnShapeDeleteOptions 
+} from '@tldraw/editor'
+
+export class StickerBindingUtil extends BindingUtil<StickerBinding> {
+  static override type = 'sticker' as const
+  static override props = stickerBindingProps
+  
+  getDefaultProps(): Partial<StickerBinding['props']> {
+    return {
+      relativePosition: { x: 0.5, y: 0.5 },
+      locked: false
+    }
+  }
+  
+  // Called when the frame (toShape) moves
+  onAfterChangeToShape({ 
+    binding, 
+    shapeAfter 
+  }: BindingOnShapeChangeOptions<StickerBinding>) {
+    const sticker = this.editor.getShape(binding.fromId)
+    const frame = shapeAfter
+    
+    if (!sticker || sticker.type !== 'sticker') return
+    if (!frame || frame.type !== 'frame') return
+    
+    // Calculate sticker position based on frame
+    const frameBounds = this.editor.getShapePageBounds(frame)
+    if (!frameBounds) return
+    
+    const { relativePosition } = binding.props
+    const newX = frameBounds.x + frameBounds.width * relativePosition.x
+    const newY = frameBounds.y + frameBounds.height * relativePosition.y
+    
+    // Update sticker position
+    this.editor.updateShape({
+      id: sticker.id,
+      type: 'sticker',
+      x: newX - sticker.props.w / 2,
+      y: newY - sticker.props.h / 2
+    })
+  }
+  
+  // Called when frame is deleted
+  onBeforeDeleteToShape({ 
+    binding 
+  }: BindingOnShapeDeleteOptions<StickerBinding>) {
+    // Delete the sticker when frame is deleted
+    this.editor.deleteShapes([binding.fromId])
+  }
+  
+  // Called when sticker is copied without frame
+  onBeforeIsolateFromShape({ 
+    binding, 
+    removedShape 
+  }: BindingOnShapeIsolateOptions<StickerBinding>) {
+    // Convert to absolute positioning
+    const sticker = this.editor.getShape(binding.fromId)
+    if (sticker) {
+      // Remove binding but keep sticker in place
+      this.editor.deleteBinding(binding.id)
+    }
+  }
+}
+```
+
+### Register the binding
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { StickerBindingUtil } from './StickerBindingUtil'
+
+function App() {
+  return (
+    <Tldraw
+      bindingUtils={[StickerBindingUtil]}
+      onMount={(editor) => {
+        // Create a frame and sticker
+        const frameId = createShapeId()
+        const stickerId = createShapeId()
+        
+        editor.createShapes([
+          { id: frameId, type: 'frame', x: 0, y: 0, props: { w: 400, h: 300 } },
+          { id: stickerId, type: 'sticker', x: 200, y: 150 }
+        ])
+        
+        // Create binding
+        editor.createBinding({
+          type: 'sticker',
+          fromId: stickerId,
+          toId: frameId,
+          props: {
+            relativePosition: { x: 0.5, y: 0.5 },
+            locked: false
+          }
+        })
+      }}
+    />
+  )
+}
+```
+
+</Steps>
+
+## BindingUtil lifecycle hooks
+
+### Creation hooks
+
+```tsx
+class MyBindingUtil extends BindingUtil<MyBinding> {
+  // Validate and modify binding before creation
+  onBeforeCreate({ binding }: BindingOnCreateOptions<MyBinding>) {
+    // Validate
+    const fromShape = this.editor.getShape(binding.fromId)
+    const toShape = this.editor.getShape(binding.toId)
+    
+    if (!fromShape || !toShape) return
+    
+    // Modify props if needed
+    return {
+      ...binding,
+      props: {
+        ...binding.props,
+        computedValue: calculateValue(fromShape, toShape)
+      }
+    }
+  }
+  
+  // Perform side effects after creation
+  onAfterCreate({ binding }: BindingOnCreateOptions<MyBinding>) {
+    // Update connected shapes
+    const fromShape = this.editor.getShape(binding.fromId)
+    if (fromShape) {
+      this.editor.updateShape({
+        id: fromShape.id,
+        type: fromShape.type,
+        meta: { ...fromShape.meta, hasBinding: true }
+      })
+    }
+  }
+}
+```
+
+### Change hooks
+
+```tsx
+class MyBindingUtil extends BindingUtil<MyBinding> {
+  // Validate and modify changes
+  onBeforeChange({ 
+    bindingBefore, 
+    bindingAfter 
+  }: BindingOnChangeOptions<MyBinding>) {
+    // Validate change
+    if (bindingAfter.props.value < 0) {
+      return bindingBefore // Reject change
+    }
+    
+    return bindingAfter
+  }
+  
+  // React to shape changes
+  onAfterChangeFromShape({ 
+    binding, 
+    shapeBefore, 
+    shapeAfter,
+    reason 
+  }: BindingOnShapeChangeOptions<MyBinding>) {
+    // reason is 'self' or 'ancestry'
+    if (reason === 'self') {
+      // The shape itself changed
+      this.updateBinding(binding, shapeAfter)
+    }
+  }
+  
+  onAfterChangeToShape({ 
+    binding, 
+    shapeBefore, 
+    shapeAfter 
+  }: BindingOnShapeChangeOptions<MyBinding>) {
+    // Handle target shape changes
+    this.updateSourceShape(binding, shapeAfter)
+  }
+}
+```
+
+### Deletion hooks
+
+```tsx
+class MyBindingUtil extends BindingUtil<MyBinding> {
+  // Called when binding is being deleted
+  onBeforeDelete({ binding }: BindingOnDeleteOptions<MyBinding>) {
+    // Clean up related shapes
+    const fromShape = this.editor.getShape(binding.fromId)
+    if (fromShape) {
+      this.editor.updateShape({
+        id: fromShape.id,
+        type: fromShape.type,
+        meta: { ...fromShape.meta, hasBinding: false }
+      })
+    }
+  }
+  
+  // Called when source shape is deleted
+  onBeforeDeleteFromShape({ 
+    binding, 
+    shape 
+  }: BindingOnShapeDeleteOptions<MyBinding>) {
+    // Delete the binding
+    this.editor.deleteBinding(binding.id)
+  }
+  
+  // Called when target shape is deleted
+  onBeforeDeleteToShape({ 
+    binding, 
+    shape 
+  }: BindingOnShapeDeleteOptions<MyBinding>) {
+    // Update source shape to no longer reference deleted shape
+    this.editor.deleteBinding(binding.id)
+  }
+}
+```
+
+### Isolation hooks
+
+Called when shapes are separated (copy, duplicate, etc.):
+
+```tsx
+class MyBindingUtil extends BindingUtil<MyBinding> {
+  // Called when source shape is isolated
+  onBeforeIsolateFromShape({ 
+    binding, 
+    removedShape 
+  }: BindingOnShapeIsolateOptions<MyBinding>) {
+    const fromShape = this.editor.getShape(binding.fromId)
+    
+    if (fromShape) {
+      // Convert to standalone state
+      this.editor.updateShape({
+        id: fromShape.id,
+        type: fromShape.type,
+        props: {
+          ...fromShape.props,
+          standalone: true
+        }
+      })
+    }
+    
+    // Delete the binding
+    this.editor.deleteBinding(binding.id)
+  }
+  
+  // Called when target shape is isolated
+  onBeforeIsolateToShape({ 
+    binding, 
+    removedShape 
+  }: BindingOnShapeIsolateOptions<MyBinding>) {
+    // Similar handling for target shape
+    this.editor.deleteBinding(binding.id)
+  }
+}
+```
+
+## Working with bindings
+
+### Creating bindings
+
+```tsx
+import { createBindingId } from '@tldraw/editor'
+
+// Create a binding
+const bindingId = createBindingId()
+
+editor.createBinding({
+  id: bindingId,
+  type: 'arrow',
+  fromId: arrowId,
+  toId: targetShapeId,
+  props: {
+    terminal: 'end',
+    normalizedAnchor: { x: 0.5, y: 0.5 },
+    isExact: false,
+    isPrecise: false
+  }
+})
+```
+
+### Reading bindings
+
+```tsx
+// Get binding by id
+const binding = editor.getBinding(bindingId)
+
+// Get all bindings from a shape
+const bindingsFrom = editor.getBindingsFromShape(shapeId, 'arrow')
+
+// Get all bindings to a shape
+const bindingsTo = editor.getBindingsToShape(shapeId, 'arrow')
+
+// Get all bindings involving a shape
+const allBindings = editor.getBindingsInvolvingShape(shapeId)
+```
+
+### Updating bindings
+
+```tsx
+editor.updateBinding({
+  id: bindingId,
+  type: 'arrow',
+  props: {
+    normalizedAnchor: { x: 0.8, y: 0.2 }
+  }
+})
+```
+
+### Deleting bindings
+
+```tsx
+// Delete specific binding
+editor.deleteBinding(bindingId)
+
+// Delete all bindings involving a shape
+const bindings = editor.getBindingsInvolvingShape(shapeId)
+editor.deleteBindings(bindings.map(b => b.id))
+```
+
+## ShapeUtil binding methods
+
+Shapes can control whether they accept bindings:
+
+```tsx
+export class MyShapeUtil extends ShapeUtil<MyShape> {
+  // Control which bindings this shape accepts
+  canBind({ 
+    fromShape, 
+    toShape, 
+    bindingType 
+  }: TLShapeUtilCanBindOpts<MyShape>) {
+    // Only allow arrow bindings
+    if (bindingType !== 'arrow') return false
+    
+    // Only allow as target (toShape), not source
+    if ('id' in toShape && toShape.id === this.editor.getShape(toShape)?.id) {
+      return true
+    }
+    
+    return false
+  }
+  
+  // Provide snap points for bindings
+  getBindingSnapGeometry(shape: MyShape) {
+    const bounds = this.editor.getShapeGeometry(shape).bounds
+    
+    return {
+      // Snap points around the perimeter
+      points: [
+        { x: bounds.minX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.maxY },
+        { x: bounds.minX, y: bounds.maxY },
+      ]
+    }
+  }
+}
+```
+
+## Real-world example: Arrow bindings
+
+The built-in arrow binding demonstrates advanced features:
+
+```tsx
+export class ArrowBindingUtil extends BindingUtil<TLArrowBinding> {
+  static override type = 'arrow' as const
+  static override props = arrowBindingProps
+  
+  getDefaultProps(): Partial<TLArrowBinding['props']> {
+    return {
+      terminal: 'start',
+      normalizedAnchor: { x: 0.5, y: 0.5 },
+      isExact: false,
+      isPrecise: false
+    }
+  }
+  
+  onAfterChangeToShape({ 
+    binding, 
+    shapeAfter 
+  }: BindingOnShapeChangeOptions<TLArrowBinding>) {
+    const arrow = this.editor.getShape<TLArrowShape>(binding.fromId)
+    if (!arrow) return
+    
+    // Calculate new arrow terminal position
+    const targetBounds = this.editor.getShapePageBounds(shapeAfter)
+    if (!targetBounds) return
+    
+    const { normalizedAnchor } = binding.props
+    const terminal = binding.props.terminal
+    
+    // Get point on target shape
+    const point = {
+      x: targetBounds.x + targetBounds.width * normalizedAnchor.x,
+      y: targetBounds.y + targetBounds.height * normalizedAnchor.y
+    }
+    
+    // Update arrow endpoint
+    this.editor.updateShape({
+      id: arrow.id,
+      type: 'arrow',
+      props: {
+        [terminal]: {
+          x: point.x - arrow.x,
+          y: point.y - arrow.y
+        }
+      }
+    })
+  }
+  
+  onBeforeDeleteToShape({ binding }: BindingOnShapeDeleteOptions) {
+    // When target is deleted, remove binding
+    this.editor.deleteBinding(binding.id)
+    
+    // Update arrow to use fixed endpoint
+    const arrow = this.editor.getShape<TLArrowShape>(binding.fromId)
+    if (arrow) {
+      // Arrow keeps its current position but is no longer bound
+      this.editor.updateShape({
+        id: arrow.id,
+        type: 'arrow',
+        props: {
+          // Arrow terminal stays at current position
+        }
+      })
+    }
+  }
+  
+  onBeforeIsolateFromShape({ binding }: BindingOnShapeIsolateOptions) {
+    // When arrow is copied without target, convert to fixed endpoint
+    this.editor.deleteBinding(binding.id)
+  }
+}
+```
+
+## Best practices
+
+<Note>
+**Handle all lifecycle hooks**: Implement all relevant hooks to ensure bindings behave correctly during copy, paste, delete, and other operations.
+</Note>
+
+<Note>
+**Validate in onBeforeCreate**: Check that both shapes exist and are compatible before creating a binding.
+</Note>
+
+<Info>
+**Use isolation hooks**: Implement isolation hooks to handle copying and duplicating shapes without breaking bindings.
+</Info>
+
+<Note>
+**Update in transactions**: Wrap binding updates and related shape changes in `editor.run()` for proper undo/redo.
+</Note>
+
+## Related
+
+- [Shapes](/concepts/shapes) - Learn about shapes that bindings connect
+- [Editor](/concepts/editor) - Working with the Editor API
+- [Bindings API](/api-reference/bindings) - Complete bindings API reference

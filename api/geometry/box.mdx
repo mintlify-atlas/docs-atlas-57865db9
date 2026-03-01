@@ -1,0 +1,450 @@
+---
+title: Box class
+description: Axis-aligned bounding box for 2D spatial calculations
+---
+
+The `Box` class represents an axis-aligned bounding box with position (x, y) and dimensions (w, h). It provides methods for box manipulation, collision detection, and spatial queries.
+
+## Constructor
+
+```typescript
+const box = new Box(x, y, w, h)
+```
+
+<ParamField path="x" type="number" default="0">
+  The x-coordinate of the box's top-left corner
+</ParamField>
+
+<ParamField path="y" type="number" default="0">
+  The y-coordinate of the box's top-left corner
+</ParamField>
+
+<ParamField path="w" type="number" default="0">
+  The width of the box
+</ParamField>
+
+<ParamField path="h" type="number" default="0">
+  The height of the box
+</ParamField>
+
+## Properties
+
+<ParamField path="x" type="number">
+  The x-coordinate of the box
+</ParamField>
+
+<ParamField path="y" type="number">
+  The y-coordinate of the box
+</ParamField>
+
+<ParamField path="w" type="number">
+  The width of the box
+</ParamField>
+
+<ParamField path="h" type="number">
+  The height of the box
+</ParamField>
+
+<ParamField path="point" type="Vec">
+  The top-left point of the box (getter/setter)
+</ParamField>
+
+<ParamField path="center" type="Vec">
+  The center point of the box (getter/setter)
+</ParamField>
+
+<ParamField path="corners" type="Vec[]">
+  Array of the four corner points [top-left, top-right, bottom-right, bottom-left]
+</ParamField>
+
+<ParamField path="sides" type="Array<[Vec, Vec]>">
+  Array of the four sides as pairs of points
+</ParamField>
+
+<ParamField path="minX" type="number">
+  The minimum x-coordinate (left edge)
+</ParamField>
+
+<ParamField path="maxX" type="number">
+  The maximum x-coordinate (right edge)
+</ParamField>
+
+<ParamField path="minY" type="number">
+  The minimum y-coordinate (top edge)
+</ParamField>
+
+<ParamField path="maxY" type="number">
+  The maximum y-coordinate (bottom edge)
+</ParamField>
+
+<ParamField path="width" type="number">
+  Alias for w (getter/setter)
+</ParamField>
+
+<ParamField path="height" type="number">
+  Alias for h (getter/setter)
+</ParamField>
+
+<ParamField path="aspectRatio" type="number">
+  The aspect ratio (width / height)
+</ParamField>
+
+## Instance methods
+
+### set
+
+```typescript
+box.set(x: number, y: number, w: number, h: number): Box
+```
+
+Sets the box's position and dimensions. Returns the box for chaining.
+
+### setTo
+
+```typescript
+box.setTo(other: Box): Box
+```
+
+Copies another box's values. Returns the box for chaining.
+
+### clone
+
+```typescript
+box.clone(): Box
+```
+
+Creates a copy of the box.
+
+### expand
+
+```typescript
+box.expand(other: Box): Box
+```
+
+Expands the box to include another box. Returns the box for chaining.
+
+### expandBy
+
+```typescript
+box.expandBy(amount: number): Box
+```
+
+Expands the box by a given amount in all directions. Returns the box for chaining.
+
+```typescript
+const box = new Box(0, 0, 100, 100)
+box.expandBy(10) // Box is now (-10, -10, 120, 120)
+```
+
+### translate
+
+```typescript
+box.translate(delta: VecLike): Box
+```
+
+Moves the box by a delta vector. Returns the box for chaining.
+
+```typescript
+const box = new Box(0, 0, 100, 100)
+box.translate({ x: 10, y: 20 }) // Box is now (10, 20, 100, 100)
+```
+
+### scale
+
+```typescript
+box.scale(factor: number): Box
+```
+
+Scales the box by dividing position and dimensions by the factor. Returns the box for chaining.
+
+### collides
+
+```typescript
+box.collides(other: Box): boolean
+```
+
+Checks if this box overlaps with another box.
+
+```typescript
+const box1 = new Box(0, 0, 100, 100)
+const box2 = new Box(50, 50, 100, 100)
+const overlaps = box1.collides(box2) // true
+```
+
+### contains
+
+```typescript
+box.contains(other: Box): boolean
+```
+
+Checks if this box fully contains another box.
+
+### containsPoint
+
+```typescript
+box.containsPoint(point: VecLike, margin?: number): boolean
+```
+
+Checks if a point is inside the box, with optional margin.
+
+```typescript
+const box = new Box(0, 0, 100, 100)
+const inside = box.containsPoint({ x: 50, y: 50 }) // true
+const outsideWithMargin = box.containsPoint({ x: 105, y: 50 }, 10) // true
+```
+
+### getHandlePoint
+
+```typescript
+box.getHandlePoint(handle: SelectionCorner | SelectionEdge): Vec
+```
+
+Gets the position of a selection handle (corner or edge midpoint).
+
+```typescript
+const box = new Box(0, 0, 100, 100)
+const topLeft = box.getHandlePoint('top_left')
+const rightEdge = box.getHandlePoint('right')
+```
+
+### resize
+
+```typescript
+box.resize(handle: SelectionCorner | SelectionEdge, dx: number, dy: number): void
+```
+
+Resizes the box by dragging a handle by dx/dy amounts.
+
+### snapToGrid
+
+```typescript
+box.snapToGrid(size: number): void
+```
+
+Snaps the box's position and dimensions to a grid.
+
+### toJson
+
+```typescript
+box.toJson(): BoxModel
+```
+
+Converts the box to a plain object `{ x, y, w, h }`.
+
+### equals
+
+```typescript
+box.equals(other: Box | BoxModel): boolean
+```
+
+Checks if two boxes have identical values.
+
+### isValid
+
+```typescript
+box.isValid(): boolean
+```
+
+Checks if all box values are finite numbers.
+
+### toFixed
+
+```typescript
+box.toFixed(): Box
+```
+
+Rounds all values to two decimal places. Returns the box for chaining.
+
+### zeroFix
+
+```typescript
+box.zeroFix(): Box
+```
+
+Ensures width and height are at least 1. Returns the box for chaining.
+
+## Static methods
+
+### Box.From
+
+```typescript
+Box.From(box: BoxModel): Box
+```
+
+Creates a Box from a plain object.
+
+```typescript
+const box = Box.From({ x: 0, y: 0, w: 100, h: 50 })
+```
+
+### Box.FromCenter
+
+```typescript
+Box.FromCenter(center: VecLike, size: VecLike): Box
+```
+
+Creates a box from a center point and size.
+
+```typescript
+const box = Box.FromCenter({ x: 50, y: 50 }, { x: 100, y: 100 })
+// Creates a box at (0, 0) with size (100, 100)
+```
+
+### Box.FromPoints
+
+```typescript
+Box.FromPoints(points: VecLike[]): Box
+```
+
+Creates a bounding box that contains all given points.
+
+```typescript
+const points = [
+  new Vec(10, 20),
+  new Vec(100, 50),
+  new Vec(50, 150)
+]
+const bounds = Box.FromPoints(points)
+```
+
+### Box.Expand
+
+```typescript
+Box.Expand(a: Box, b: Box): Box
+```
+
+Creates a new box that contains both input boxes.
+
+### Box.ExpandBy
+
+```typescript
+Box.ExpandBy(box: Box, amount: number): Box
+```
+
+Creates a new box expanded by the given amount.
+
+### Box.Collides
+
+```typescript
+Box.Collides(a: Box, b: Box): boolean
+```
+
+Checks if two boxes overlap.
+
+### Box.Contains
+
+```typescript
+Box.Contains(a: Box, b: Box): boolean
+```
+
+Checks if box A fully contains box B.
+
+### Box.ContainsPoint
+
+```typescript
+Box.ContainsPoint(box: Box, point: VecLike, margin?: number): boolean
+```
+
+Checks if a point is inside a box.
+
+### Box.Common
+
+```typescript
+Box.Common(boxes: Box[]): Box
+```
+
+Creates a bounding box that contains all given boxes.
+
+### Box.Resize
+
+```typescript
+Box.Resize(
+  box: Box,
+  handle: SelectionCorner | SelectionEdge,
+  dx: number,
+  dy: number,
+  isAspectRatioLocked?: boolean
+): { box: Box; scaleX: number; scaleY: number }
+```
+
+Creates a new resized box and returns the box along with scale factors.
+
+```typescript
+const box = new Box(0, 0, 100, 100)
+const result = Box.Resize(box, 'bottom_right', 50, 50, false)
+console.log(result.box) // Resized box
+console.log(result.scaleX, result.scaleY) // Scale factors
+```
+
+### Box.Equals
+
+```typescript
+Box.Equals(a: Box | BoxModel, b: Box | BoxModel): boolean
+```
+
+Checks if two boxes have identical values.
+
+### Box.ZeroFix
+
+```typescript
+Box.ZeroFix(box: Box | BoxModel): Box
+```
+
+Creates a new box with width and height of at least 1.
+
+## Type definitions
+
+### BoxLike
+
+```typescript
+type BoxLike = BoxModel | Box
+```
+
+### SelectionEdge
+
+```typescript
+type SelectionEdge = 'top' | 'right' | 'bottom' | 'left'
+```
+
+### SelectionCorner
+
+```typescript
+type SelectionCorner = 'top_left' | 'top_right' | 'bottom_right' | 'bottom_left'
+```
+
+### SelectionHandle
+
+```typescript
+type SelectionHandle = SelectionEdge | SelectionCorner
+```
+
+## Example usage
+
+```typescript
+import { Box, Vec } from 'tldraw'
+
+// Create a box
+const box = new Box(0, 0, 100, 50)
+
+// Get properties
+console.log(box.center) // Vec(50, 25)
+console.log(box.aspectRatio) // 2
+console.log(box.corners) // [Vec(0,0), Vec(100,0), Vec(100,50), Vec(0,50)]
+
+// Manipulate
+box.expandBy(10).translate({ x: 5, y: 5 })
+
+// Collision detection
+const other = new Box(50, 25, 100, 50)
+if (box.collides(other)) {
+  console.log('Boxes overlap!')
+}
+
+// Create from points
+const points = [
+  new Vec(10, 20),
+  new Vec(100, 50),
+  new Vec(50, 150)
+]
+const bounds = Box.FromPoints(points)
+```

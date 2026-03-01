@@ -1,122 +1,223 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "tldraw",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#1d1d1d",
+    "light": "#8b8b8b",
+    "dark": "#fafafa"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/tldraw/tldraw"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/tldraw/tldraw"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/editor",
+              "concepts/shapes",
+              "concepts/tools",
+              "concepts/bindings",
+              "concepts/canvas",
+              "concepts/store"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/custom-shapes",
+              "guides/custom-tools",
+              "guides/custom-ui",
+              "guides/multiplayer",
+              "guides/events-and-side-effects",
+              "guides/persistence",
+              "guides/ai-integrations"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Shapes",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "shapes/overview",
+              "shapes/shape-utils",
+              "shapes/geometry",
+              "shapes/rendering",
+              "shapes/interactions"
+            ]
+          },
+          {
+            "group": "UI and theming",
+            "pages": [
+              "ui/overview",
+              "ui/components",
+              "ui/customization",
+              "ui/menus-and-toolbars",
+              "ui/translations"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/architecture",
+              "advanced/state-management",
+              "advanced/performance",
+              "advanced/export-and-import",
+              "advanced/embedding"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core",
             "pages": [
-              "api-reference/introduction"
+              "api/editor",
+              "api/tldraw-component",
+              "api/store",
+              "api/schema"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Shapes",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/shapes/shape-util",
+              "api/shapes/base-box-shape",
+              "api/shapes/arrow",
+              "api/shapes/draw",
+              "api/shapes/geo",
+              "api/shapes/text",
+              "api/shapes/image",
+              "api/shapes/video",
+              "api/shapes/frame",
+              "api/shapes/note"
+            ]
+          },
+          {
+            "group": "Tools",
+            "pages": [
+              "api/tools/state-node",
+              "api/tools/select-tool",
+              "api/tools/hand-tool",
+              "api/tools/eraser-tool",
+              "api/tools/zoom-tool"
+            ]
+          },
+          {
+            "group": "Bindings",
+            "pages": [
+              "api/bindings/binding-util",
+              "api/bindings/arrow-binding"
+            ]
+          },
+          {
+            "group": "UI Components",
+            "pages": [
+              "api/ui/context-providers",
+              "api/ui/hooks",
+              "api/ui/primitives",
+              "api/ui/actions-and-tools"
+            ]
+          },
+          {
+            "group": "Geometry",
+            "pages": [
+              "api/geometry/primitives",
+              "api/geometry/box",
+              "api/geometry/vec",
+              "api/geometry/shapes"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utils/assets",
+              "api/utils/export",
+              "api/utils/text"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Multiplayer",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": [
+              "sync/introduction",
+              "sync/quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "sync/setup",
+              "sync/authentication",
+              "sync/deployment",
+              "sync/customization"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "sync/api/client",
+              "sync/api/server",
+              "sync/api/store-sync"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Basic",
+            "pages": [
+              "examples/basic-setup",
+              "examples/controlled-editor",
+              "examples/readonly-mode"
+            ]
+          },
+          {
+            "group": "Customization",
+            "pages": [
+              "examples/custom-shape",
+              "examples/custom-tool",
+              "examples/custom-ui",
+              "examples/custom-styles"
+            ]
+          },
+          {
+            "group": "Integration",
+            "pages": [
+              "examples/multiplayer",
+              "examples/persistence",
+              "examples/ai-integration",
+              "examples/embedded-content"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

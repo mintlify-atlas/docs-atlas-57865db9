@@ -1,0 +1,573 @@
+---
+title: Multiplayer
+description: Learn how to add real-time multiplayer collaboration to your tldraw app
+---
+
+Add real-time multiplayer collaboration to your tldraw app using the `@tldraw/sync` package.
+
+## Overview
+
+tldraw's multiplayer system provides:
+
+- Real-time synchronization of shapes and canvas state
+- User presence (cursors, selections, and custom presence data)
+- Conflict-free collaborative editing
+- Automatic reconnection and offline support
+
+## Quick start with demo server
+
+The fastest way to get started is using tldraw's demo multiplayer server:
+
+<Steps>
+  <Step title="Install the sync package">
+    ```bash
+    npm install @tldraw/sync
+    ```
+  </Step>
+
+  <Step title="Use useSyncDemo hook">
+    ```tsx
+    import { useSyncDemo } from '@tldraw/sync'
+    import { Tldraw } from 'tldraw'
+    import 'tldraw/tldraw.css'
+
+    export default function MultiplayerApp({ roomId }: { roomId: string }) {
+      const store = useSyncDemo({ roomId })
+      
+      return (
+        <div className="tldraw__editor">
+          <Tldraw store={store} />
+        </div>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Create unique room IDs">
+    ```tsx
+    // Use different room IDs for different collaboration sessions
+    function App() {
+      const roomId = 'my-app:room-' + window.location.pathname
+      return <MultiplayerApp roomId={roomId} />
+    }
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  The demo server is for prototyping only:
+  - Data is deleted after ~24 hours
+  - Publicly accessible to anyone with the room ID
+  - File uploads are disabled on production domains
+  - Not suitable for production use
+</Warning>
+
+## Production multiplayer setup
+
+For production, use the `useSync` hook with your own WebSocket server:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+import { Tldraw } from 'tldraw'
+
+function CollaborativeApp() {
+  const store = useSync({
+    uri: 'wss://myserver.com/sync/room-123',
+    assets: myAssetStore,
+    userInfo: {
+      id: 'user-1',
+      name: 'Alice',
+      color: '#ff0000'
+    }
+  })
+
+  if (store.status === 'loading') {
+    return <div>Connecting to collaboration session...</div>
+  }
+
+  if (store.status === 'error') {
+    return <div>Failed to connect: {store.error.message}</div>
+  }
+
+  return <Tldraw store={store.store} />
+}
+```
+
+## Store status handling
+
+The sync store has three states:
+
+<Tabs>
+  <Tab title="Loading">
+    ```tsx
+    if (store.status === 'loading') {
+      return (
+        <div className="loading-state">
+          <Spinner />
+          <p>Connecting to multiplayer session...</p>
+        </div>
+      )
+    }
+    ```
+    
+    Displayed while establishing connection and syncing initial state.
+  </Tab>
+
+  <Tab title="Synced">
+    ```tsx
+    if (store.status === 'synced-remote') {
+      return <Tldraw store={store.store} />
+    }
+    ```
+    
+    Successfully connected and actively synchronizing. The `connectionStatus` property indicates network state:
+    - `online`: Connected and syncing
+    - `offline`: Temporarily disconnected (will auto-reconnect)
+  </Tab>
+
+  <Tab title="Error">
+    ```tsx
+    if (store.status === 'error') {
+      return (
+        <div className="error-state">
+          <p>Connection failed: {store.error.message}</p>
+          <button onClick={() => window.location.reload()}>
+            Retry
+          </button>
+        </div>
+      )
+    }
+    ```
+    
+    Connection failed or synchronization error occurred.
+  </Tab>
+</Tabs>
+
+## User presence
+
+Customize how users appear to each other:
+
+### Static user info
+
+```tsx
+const store = useSync({
+  uri: 'wss://myserver.com/sync/room-123',
+  assets: myAssetStore,
+  userInfo: {
+    id: 'user-123',
+    name: 'Alice Johnson',
+    color: '#ff0000',
+  }
+})
+```
+
+### Reactive user info
+
+```tsx
+import { atom } from '@tldraw/state'
+
+function App() {
+  const currentUser = atom('user', { 
+    id: 'user-123', 
+    name: 'Alice', 
+    color: '#ff0000' 
+  })
+
+  const store = useSync({
+    uri: 'wss://myserver.com/sync/room-123',
+    assets: myAssetStore,
+    userInfo: currentUser, // Reactive signal
+  })
+
+  // Update user info dynamically
+  const updateUserName = (newName: string) => {
+    currentUser.update((user) => ({ ...user, name: newName }))
+  }
+
+  return <Tldraw store={store.store} />
+}
+```
+
+### Custom presence data
+
+Add custom fields to presence:
+
+```tsx
+const store = useSync({
+  uri: 'wss://myserver.com/sync/room-123',
+  assets: myAssetStore,
+  userInfo: {
+    id: 'user-123',
+    name: 'Alice',
+    color: '#ff0000',
+  },
+  getUserPresence: (store, user) => {
+    const instance = store.get('instance:user-123')
+    
+    return {
+      userId: user.id,
+      userName: user.name,
+      cursor: instance?.cursor ?? { x: 0, y: 0 },
+      selectedShapeIds: instance?.selectedShapeIds ?? [],
+      currentTool: instance?.currentToolId ?? 'select',
+      // Custom fields:
+      isTyping: instance?.isTyping ?? false,
+      viewportBounds: instance?.viewportBounds,
+    }
+  }
+})
+```
+
+## Asset handling
+
+For production multiplayer, implement an asset store for file uploads:
+
+```tsx
+import { TLAssetStore } from 'tldraw'
+
+const assetStore: TLAssetStore = {
+  // Upload file to your storage
+  upload: async (asset, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await fetch('https://myserver.com/upload', {
+      method: 'POST',
+      body: formData,
+    })
+    
+    const { url } = await response.json()
+    return { src: url }
+  },
+
+  // Resolve asset URL (with optional optimization)
+  resolve: (asset, context) => {
+    if (!asset.props.src) return null
+    
+    // Return optimized URL based on context
+    if (asset.type === 'image' && context.shouldResolveToOriginal) {
+      return asset.props.src
+    }
+    
+    // Return CDN URL with transformations
+    return `https://cdn.myserver.com/${asset.props.src}?w=${context.width}&dpr=${context.dpr}`
+  }
+}
+
+const store = useSync({
+  uri: 'wss://myserver.com/sync/room-123',
+  assets: assetStore,
+  // ...
+})
+```
+
+<Tip>
+  Without an asset store, images and videos are stored as base64 inline data, which causes performance issues with large files.
+</Tip>
+
+## Authentication
+
+Add authentication to your multiplayer connection:
+
+```tsx
+function AuthenticatedApp() {
+  const store = useSync({
+    // Use function for dynamic URI with auth token
+    uri: async () => {
+      const token = await getAuthToken()
+      return `wss://myserver.com/sync/room-123?token=${token}`
+    },
+    assets: myAssetStore,
+    userInfo: currentUser,
+  })
+
+  return <Tldraw store={store.store} />
+}
+
+async function getAuthToken(): Promise<string> {
+  // Fetch from your auth system
+  const response = await fetch('/api/auth/token')
+  const { token } = await response.json()
+  return token
+}
+```
+
+## Custom shapes in multiplayer
+
+Custom shapes work automatically with multiplayer:
+
+```tsx
+import { useSyncDemo } from '@tldraw/sync'
+import { Tldraw } from 'tldraw'
+import { MyCustomShapeUtil } from './MyCustomShape'
+
+const customShapeUtils = [MyCustomShapeUtil]
+
+export default function MultiplayerWithCustomShapes({ roomId }: { roomId: string }) {
+  const store = useSyncDemo({ 
+    roomId,
+    shapeUtils: customShapeUtils,
+  })
+  
+  return <Tldraw store={store} shapeUtils={customShapeUtils} />
+}
+```
+
+<Note>
+  All collaborators must have the same custom shape utilities registered for proper synchronization.
+</Note>
+
+## Connection status indicator
+
+Show users their connection state:
+
+```tsx
+import { Tldraw, useEditor, track } from 'tldraw'
+import { useSync } from '@tldraw/sync'
+
+const ConnectionStatus = track(() => {
+  const editor = useEditor()
+  const status = editor.getCollaborationStatus()
+
+  return (
+    <div className="connection-status" data-status={status}>
+      {status === 'online' && '✅ Connected'}
+      {status === 'offline' && '⚠️ Reconnecting...'}
+    </div>
+  )
+})
+
+function App() {
+  const store = useSync({ /* ... */ })
+  
+  return (
+    <Tldraw store={store.store}>
+      <ConnectionStatus />
+    </Tldraw>
+  )
+}
+```
+
+## Custom messages
+
+Send custom messages between clients:
+
+```tsx
+import { useSync } from '@tldraw/sync'
+
+function ChatApp() {
+  const store = useSync({
+    uri: 'wss://myserver.com/sync/room-123',
+    assets: myAssetStore,
+    
+    // Receive custom messages
+    onCustomMessageReceived: (data) => {
+      if (data.type === 'chat') {
+        displayChatMessage(data.message, data.userId)
+      }
+    }
+  })
+
+  // Send custom messages
+  const sendChatMessage = (message: string) => {
+    if (store.status === 'synced-remote') {
+      // Access the sync client to send messages
+      // Note: You'll need to store a reference to the client
+      syncClient.sendMessage({
+        type: 'chat',
+        message,
+        userId: currentUser.id,
+        timestamp: Date.now(),
+      })
+    }
+  }
+
+  return <Tldraw store={store.store} />
+}
+```
+
+## Collaboration features
+
+### Following users
+
+```tsx
+import { useEditor, track } from 'tldraw'
+
+const FollowButton = track(({ userId }: { userId: string }) => {
+  const editor = useEditor()
+  const isFollowing = editor.getInstanceState().followingUserId === userId
+
+  return (
+    <button
+      onClick={() => {
+        if (isFollowing) {
+          editor.stopFollowingUser()
+        } else {
+          editor.startFollowingUser(userId)
+        }
+      }}
+    >
+      {isFollowing ? 'Stop following' : 'Follow'}
+    </button>
+  )
+})
+```
+
+### User list
+
+```tsx
+import { useEditor, track } from 'tldraw'
+
+const UserList = track(() => {
+  const editor = useEditor()
+  const users = editor.getCollaborators()
+
+  return (
+    <div className="user-list">
+      {users.map((user) => (
+        <div key={user.userId} className="user-item">
+          <div 
+            className="user-color" 
+            style={{ backgroundColor: user.color }}
+          />
+          <span>{user.userName}</span>
+        </div>
+      ))}
+    </div>
+  )
+})
+```
+
+## Room management
+
+### Multiple rooms
+
+```tsx
+import { useState } from 'react'
+import { useSyncDemo } from '@tldraw/sync'
+import { Tldraw } from 'tldraw'
+
+function MultiRoomApp() {
+  const [currentRoom, setCurrentRoom] = useState('room-1')
+  const store = useSyncDemo({ roomId: `myapp:${currentRoom}` })
+
+  return (
+    <>
+      <div className="room-switcher">
+        <button onClick={() => setCurrentRoom('room-1')}>Room 1</button>
+        <button onClick={() => setCurrentRoom('room-2')}>Room 2</button>
+        <button onClick={() => setCurrentRoom('room-3')}>Room 3</button>
+      </div>
+      
+      <Tldraw key={currentRoom} store={store} />
+    </>
+  )
+}
+```
+
+### Private rooms
+
+Implement access control on your server:
+
+```tsx
+const store = useSync({
+  uri: async () => {
+    const token = await getAuthToken()
+    const roomId = 'private-room-123'
+    
+    // Server validates token and room access
+    return `wss://myserver.com/sync/${roomId}?token=${token}`
+  },
+  assets: myAssetStore,
+})
+```
+
+## Performance optimization
+
+<AccordionGroup>
+  <Accordion title="Limit presence updates">
+    Reduce bandwidth by customizing presence data:
+    
+    ```tsx
+    getUserPresence: (store, user) => {
+      // Only send essential data
+      return {
+        userId: user.id,
+        userName: user.name,
+        cursor: getCurrentCursor(store),
+        // Omit unnecessary fields
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use asset CDN">
+    Serve assets from a CDN for faster loading:
+    
+    ```tsx
+    const assetStore: TLAssetStore = {
+      upload: async (asset, file) => {
+        const url = await uploadToCDN(file)
+        return { src: url }
+      },
+      resolve: (asset) => {
+        return `https://cdn.myapp.com/${asset.props.src}`
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Implement reconnection logic">
+    Handle disconnections gracefully:
+    
+    ```tsx
+    if (store.status === 'synced-remote') {
+      const isOffline = store.connectionStatus === 'offline'
+      
+      if (isOffline) {
+        // Show offline indicator
+        // Queue local changes
+        // Auto-reconnect is handled automatically
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection fails immediately">
+    - Verify WebSocket URL is correct
+    - Check CORS settings on your server
+    - Ensure server is running and accessible
+    - Verify authentication tokens are valid
+  </Accordion>
+
+  <Accordion title="Shapes not syncing">
+    - Ensure all clients have same shape utilities registered
+    - Check that shape types match exactly
+    - Verify custom shapes use JSON-serializable props
+  </Accordion>
+
+  <Accordion title="High latency">
+    - Use WebSocket compression
+    - Implement asset CDN for files
+    - Reduce presence data size
+    - Use geographically distributed servers
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom shapes" icon="shapes" href="/guides/custom-shapes">
+    Create custom shapes for multiplayer
+  </Card>
+  <Card title="Persistence" icon="database" href="/guides/persistence">
+    Save collaborative sessions
+  </Card>
+  <Card title="Events and side effects" icon="bolt" href="/guides/events-and-side-effects">
+    React to collaborative actions
+  </Card>
+</CardGroup>

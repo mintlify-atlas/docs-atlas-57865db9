@@ -1,0 +1,479 @@
+---
+title: Store
+description: Reactive data store for managing tldraw records
+---
+
+The `Store` is a reactive database that manages collections of typed records. It provides automatic updates, history tracking, validation, and efficient querying for tldraw's data model.
+
+## Overview
+
+The Store is the central container for your application's data, providing:
+
+- **Reactive state management** - Automatic updates using signals
+- **Type-safe operations** - Fully typed record operations
+- **History tracking** - Change notifications and history entries
+- **Schema validation** - Built-in validation and migrations
+- **Side effects** - Lifecycle hooks for business logic
+- **Efficient querying** - Indexes and reactive queries
+
+## Creating a store
+
+```typescript
+import { Store, StoreSchema } from '@tldraw/store'
+import { createTLSchema } from '@tldraw/tlschema'
+
+const schema = createTLSchema()
+
+const store = new Store({
+  schema,
+  props: {}
+})
+```
+
+### Constructor options
+
+<ParamField path="config" type="object" required>
+  Configuration object for the store
+  
+  <ParamField path="schema" type="StoreSchema<R, Props>" required>
+    The schema defining record types, validation, and migrations
+  </ParamField>
+  
+  <ParamField path="props" type="Props" required>
+    Custom properties for the store instance
+  </ParamField>
+  
+  <ParamField path="id" type="string">
+    Optional unique identifier for the store. Generated automatically if not provided.
+  </ParamField>
+  
+  <ParamField path="initialData" type="SerializedStore<R>">
+    Initial data to populate the store on creation
+  </ParamField>
+</ParamField>
+
+### Example with initial data
+
+```typescript
+const store = new Store({
+  schema,
+  props: {},
+  initialData: {
+    'shape:abc': {
+      id: 'shape:abc',
+      typeName: 'shape',
+      type: 'geo',
+      x: 100,
+      y: 100,
+      props: { w: 100, h: 100 }
+    }
+  }
+})
+```
+
+## Core properties
+
+### schema
+
+```typescript
+readonly schema: StoreSchema<R, Props>
+```
+
+The schema that defines the structure and validation rules for records in this store.
+
+### history
+
+```typescript
+readonly history: Atom<number, RecordsDiff<R>>
+```
+
+An atom containing the store's history. The history tracks all changes to records.
+
+### query
+
+```typescript
+readonly query: StoreQueries<R>
+```
+
+Reactive queries and indexes for efficiently accessing store data.
+
+### sideEffects
+
+```typescript
+readonly sideEffects: StoreSideEffects<R>
+```
+
+Side effects manager for registering lifecycle event handlers.
+
+## Record operations
+
+### get
+
+Get a record by its id.
+
+```typescript
+get<K extends IdOf<R>>(id: K): RecordFromId<K> | undefined
+```
+
+<ParamField path="id" type="IdOf<R>" required>
+  The id of the record to retrieve
+</ParamField>
+
+<ResponseField name="record" type="R | undefined">
+  The record with the given id, or undefined if not found
+</ResponseField>
+
+**Example:**
+
+```typescript
+const shape = store.get('shape:abc123')
+if (shape) {
+  console.log('Found shape:', shape.type)
+}
+```
+
+### has
+
+Check if a record exists.
+
+```typescript
+has<K extends IdOf<R>>(id: K): boolean
+```
+
+**Example:**
+
+```typescript
+if (store.has('shape:abc123')) {
+  console.log('Shape exists')
+}
+```
+
+### put
+
+Add or update records in the store.
+
+```typescript
+put(records: R[], source?: ChangeSource): void
+```
+
+<ParamField path="records" type="R[]" required>
+  Array of records to add or update
+</ParamField>
+
+<ParamField path="source" type="'user' | 'remote'">
+  The source of the changes. Defaults to 'user'.
+</ParamField>
+
+**Example:**
+
+```typescript
+store.put([
+  {
+    id: 'shape:abc',
+    typeName: 'shape',
+    type: 'geo',
+    x: 100,
+    y: 100,
+    props: { w: 100, h: 100 }
+  }
+])
+```
+
+### update
+
+Update a record using a function.
+
+```typescript
+update<K extends IdOf<R>>(
+  id: K, 
+  updater: (record: RecordFromId<K>) => RecordFromId<K>
+): void
+```
+
+**Example:**
+
+```typescript
+store.update('shape:abc', (shape) => ({
+  ...shape,
+  x: shape.x + 10
+}))
+```
+
+### remove
+
+Remove records from the store.
+
+```typescript
+remove(ids: IdOf<R>[]): void
+```
+
+**Example:**
+
+```typescript
+store.remove(['shape:abc', 'shape:def'])
+```
+
+## Querying
+
+### allRecords
+
+Get all records in the store.
+
+```typescript
+allRecords(): R[]
+```
+
+**Example:**
+
+```typescript
+const allShapes = store.allRecords().filter(r => r.typeName === 'shape')
+```
+
+### query.records
+
+Create a reactive query for records of a specific type.
+
+```typescript
+query.records<TypeName extends R['typeName']>(
+  typeName: TypeName
+): Signal<Extract<R, { typeName: TypeName }>[]>
+```
+
+**Example:**
+
+```typescript
+const shapesSignal = store.query.records('shape')
+
+// Get current value
+const shapes = shapesSignal.get()
+
+// React to changes
+react('log shapes', () => {
+  console.log('Shapes changed:', shapesSignal.get())
+})
+```
+
+### createComputedCache
+
+Create a computed cache for expensive calculations on records.
+
+```typescript
+createComputedCache<Data, S extends R = R>(
+  name: string,
+  derive: (record: S) => Data
+): ComputedCache<Data, S>
+```
+
+<ParamField path="name" type="string" required>
+  Name for the cache (for debugging)
+</ParamField>
+
+<ParamField path="derive" type="(record: S) => Data" required>
+  Function that computes the cached data from a record
+</ParamField>
+
+<ResponseField name="cache" type="ComputedCache<Data, S>">
+  A computed cache instance with a `get(id)` method
+</ResponseField>
+
+**Example:**
+
+```typescript
+const boundsCache = store.createComputedCache(
+  'bounds',
+  (shape: TLShape) => {
+    // Expensive calculation
+    return calculateBounds(shape)
+  }
+)
+
+// Get cached bounds (computed once, cached)
+const bounds = boundsCache.get('shape:abc')
+```
+
+## Change tracking
+
+### listen
+
+Listen to changes in the store.
+
+```typescript
+listen(
+  onHistory: StoreListener<R>,
+  filters?: Partial<StoreListenerFilters>
+): () => void
+```
+
+<ParamField path="onHistory" type="(entry: HistoryEntry<R>) => void" required>
+  Callback function called when changes occur
+</ParamField>
+
+<ParamField path="filters" type="Partial<StoreListenerFilters>">
+  Optional filters to control which changes trigger the listener
+  
+  <ParamField path="source" type="'user' | 'remote' | 'all'">
+    Filter by the source of changes. Defaults to 'all'.
+  </ParamField>
+  
+  <ParamField path="scope" type="'document' | 'session' | 'presence' | 'all'">
+    Filter by record scope. Defaults to 'all'.
+  </ParamField>
+</ParamField>
+
+<ResponseField name="dispose" type="() => void">
+  Function to remove the listener
+</ResponseField>
+
+**Example:**
+
+```typescript
+const unlisten = store.listen((entry) => {
+  console.log('Changes:', entry.changes)
+  console.log('Added:', Object.keys(entry.changes.added))
+  console.log('Updated:', Object.keys(entry.changes.updated))
+  console.log('Removed:', Object.keys(entry.changes.removed))
+})
+
+// Later, stop listening
+unlisten()
+```
+
+### Listen only to user changes
+
+```typescript
+const unlisten = store.listen(
+  (entry) => {
+    console.log('User made changes:', entry.changes)
+  },
+  { source: 'user' }
+)
+```
+
+## Snapshots and persistence
+
+### getSnapshot
+
+Get a snapshot of the store's current state.
+
+```typescript
+getSnapshot(scope?: RecordScope): StoreSnapshot<R>
+```
+
+<ParamField path="scope" type="'document' | 'session' | 'all'">
+  Which records to include. Defaults to 'document'.
+</ParamField>
+
+<ResponseField name="snapshot" type="StoreSnapshot<R>">
+  A snapshot containing the store data and schema information
+</ResponseField>
+
+**Example:**
+
+```typescript
+const snapshot = store.getSnapshot()
+localStorage.setItem('drawing', JSON.stringify(snapshot))
+```
+
+### loadSnapshot
+
+Load a snapshot into the store.
+
+```typescript
+loadSnapshot(snapshot: StoreSnapshot<R>): void
+```
+
+**Example:**
+
+```typescript
+const data = localStorage.getItem('drawing')
+if (data) {
+  const snapshot = JSON.parse(data)
+  store.loadSnapshot(snapshot)
+}
+```
+
+## Side effects
+
+Register callbacks for record lifecycle events.
+
+### registerBeforeCreateHandler
+
+```typescript
+store.sideEffects.registerBeforeCreateHandler('shape', (shape) => {
+  // Modify shape before it's created
+  return { ...shape, meta: { createdAt: Date.now() } }
+})
+```
+
+### registerAfterCreateHandler
+
+```typescript
+store.sideEffects.registerAfterCreateHandler('shape', (shape) => {
+  console.log('Shape created:', shape.id)
+})
+```
+
+### registerBeforeChangeHandler
+
+```typescript
+store.sideEffects.registerBeforeChangeHandler('shape', (prev, next) => {
+  // Validate or modify changes
+  if (next.x < 0) {
+    return { ...next, x: 0 }
+  }
+  return next
+})
+```
+
+### registerAfterChangeHandler
+
+```typescript
+store.sideEffects.registerAfterChangeHandler('shape', (prev, next) => {
+  console.log('Shape changed from', prev, 'to', next)
+})
+```
+
+### registerBeforeDeleteHandler
+
+```typescript
+store.sideEffects.registerBeforeDeleteHandler('shape', (shape) => {
+  console.log('About to delete:', shape.id)
+})
+```
+
+### registerAfterDeleteHandler
+
+```typescript
+store.sideEffects.registerAfterDeleteHandler('shape', (shape) => {
+  console.log('Deleted:', shape.id)
+})
+```
+
+## Transactions
+
+Group multiple operations together.
+
+```typescript
+import { transact } from '@tldraw/state'
+
+transact(() => {
+  store.put([shape1, shape2, shape3])
+  store.update('shape:abc', (s) => ({ ...s, x: 100 }))
+  store.remove(['shape:old'])
+})
+```
+
+All changes within the transact callback are batched and listeners are notified once at the end.
+
+## Advanced: Migrations
+
+The store automatically handles schema migrations when loading snapshots from older versions.
+
+```typescript
+const snapshot = store.getSnapshot()
+// Snapshot includes schema version information
+
+// When loading, migrations are applied automatically
+store.loadSnapshot(oldSnapshot)
+// Data is migrated to current schema version
+```
